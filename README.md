@@ -6,3 +6,8 @@
 - `prd.md` — требования к продукту
 
 Живая версия: https://claude.ai/artifact/BfhhFL3imSDrgLr6FGC7vW
+
+Сайт на GitHub Pages: https://qalenqyzy-netizen.github.io/ai-director/
+На сайте работают пример проекта, шпаргалка, копирование и экспорт. Генерация вопросов и сценария работает только в версии на Claude.
+
+После правок в `index.html` запустите `./build-pages.sh`, чтобы обновить `docs/index.html` для сайта.
