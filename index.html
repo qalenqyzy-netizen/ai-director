@@ -176,6 +176,22 @@ textarea{resize:vertical;min-height:72px}
 .cgroup .en{font-family:var(--mono);font-size:.74rem;color:var(--accent);text-align:right;cursor:pointer;background:none;border:0;padding:0}
 .cgroup dd{grid-column:1/-1;margin:0;font-size:.84rem;color:var(--ink-2)}
 
+/* outsee */
+.os{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.os-h{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.os-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:.86rem}
+.os-row .k{font-weight:700;min-width:52px}
+.os-row .st{color:var(--ink-2)}
+.os-row .price{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.os-row a{color:var(--accent);font-weight:700}
+.os-row .bad{color:var(--err)}
+.os-row .good{color:var(--ok);font-weight:700}
+.os-thumb{max-width:180px;border-radius:6px;border:1px solid var(--line)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 1.2s ease-in-out infinite;flex:none}
+@keyframes pulse{50%{opacity:.25}}
+.oset{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+.oset .field{min-width:180px;flex:1}
+.gallery{display:flex;flex-direction:column;gap:8px}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:.88rem;z-index:10;max-width:calc(100% - 32px)}
 .empty{text-align:center;padding:40px 16px;display:flex;flex-direction:column;gap:12px;align-items:center}
 </style>
@@ -188,6 +204,7 @@ textarea{resize:vertical;min-height:72px}
     </div>
     <div class="tabs" role="tablist">
       <button role="tab" id="tab-project" data-tab="project">Проект</button>
+      <button role="tab" id="tab-studio" data-tab="studio">Студия Outsee</button>
       <button role="tab" id="tab-cheat" data-tab="cheat">Шпаргалка режиссёра</button>
     </div>
   </header>
@@ -288,12 +305,17 @@ function blankState(){
 /* ---------- хранение ---------- */
 const KEY="ai-director:project:v1", RKEY="ai-director:rules:v1";
 function load(){try{const s=JSON.parse(localStorage.getItem(KEY));return s&&s.brief?s:null}catch{return null}}
+function migrate(s){
+  s.media=s.media||{}; s.oImg=s.oImg||"auto"; s.oVid=s.oVid||"auto"; s.oQ=s.oQ||"standard";
+  s.studio=Object.assign({req:"",kind:"image",aspect:"9:16",useHero:false,dur:5,res:null},s.studio||{});
+  return s;
+}
 let saveT;
 function save(){clearTimeout(saveT);saveT=setTimeout(()=>{try{localStorage.setItem(KEY,JSON.stringify(state))}catch{}},250)}
 function loadRules(){try{return localStorage.getItem(RKEY)||""}catch{return ""}}
 function saveRules(v){try{localStorage.setItem(RKEY,v)}catch{}}
 
-let state = load() || exampleState();
+let state = migrate(load() || exampleState());
 let rules = loadRules();
 let job = null;          // {kind,label,ctl,chars,start,shot}
 let lastError = "";
@@ -319,16 +341,16 @@ const genHint = (list,id)=>(list.find(g=>g[0]===id)||list[0])[2];
 
 /* ---------- сборка промптов ---------- */
 const clean = s=>String(s||"").trim().replace(/[.\s]+$/,"");
-function assemble(part,kind){
+function assemble(part,kind,forOutsee,arOverride){
   const r=state.result; if(!r) return "";
   const en = state.plang==="en";
   const L = en?{c:"Character (keep identical in every shot)",w:"Wearing",s:"Style",a:"Aspect ratio",n:"Negative",tag:"the character"}
               :{c:"Персонаж (сохранять идентичным в каждом кадре)",w:"Одежда",s:"Стиль",a:"Формат кадра",n:"Негатив",tag:"персонаж"};
-  const ar = kind==="sheet"?"16:9":state.ar;
+  const ar = arOverride || (kind==="sheet"?"16:9":state.ar);
   const lines=[clean(String(part||"").replace(/\[CHARACTER\]/g,L.tag))+".", `${L.c}: ${clean(r.character?.id_block)}.`];
   if(kind!=="sheet") lines.push(`${L.w}: ${clean(r.character?.wardrobe)}.`);
   lines.push(`${L.s}: ${clean(r.style?.style_block)}.`, `${L.a} ${ar}.`);
-  if(kind!=="video" && state.imggen==="mj") lines.push(`--ar ${ar==="2.39:1"?"239:100":ar} --style raw`);
+  if(!forOutsee && kind!=="video" && state.imggen==="mj") lines.push(`--ar ${ar==="2.39:1"?"239:100":ar} --style raw`);
   lines.push(`${L.n}: ${clean(r.style?.negative)}`);
   return lines.join("\n");
 }
@@ -488,6 +510,7 @@ async function buildScript(){
   const data=await runJob("script","Режиссёр пишет сценарий и промпты",scriptPrompt(),{tier:state.depth==="max"?"complex":"default"});
   if(!data) return;
   try{state.result=normalize(data)}catch{lastError=ERR.invalid_json;render();return}
+  state.media={};
   state.isExample=false; state.step=4; save(); render(); window.scrollTo({top:0});
 }
 async function redoShot(i){
@@ -495,7 +518,7 @@ async function redoShot(i){
   const data=await runJob("shot",`Переснимаю кадр ${shot.n}`,redoPrompt(shot,wish),{shot:i});
   if(!data||typeof data!=="object"||!data.image_prompt){if(data) {lastError=ERR.invalid_json;render()} return}
   state.result.shots[i]={...shot,...data,n:shot.n,time:shot.time,dur:shot.dur,act:shot.act};
-  redoWish[i]=""; state.isExample=false; save(); render();
+  redoWish[i]=""; delete state.media["shot-"+i]; state.isExample=false; save(); render();
   requestAnimationFrame(()=>flashShot(i));
   toast(`Кадр ${shot.n} переснят`);
 }
@@ -506,6 +529,191 @@ async function downloadMd(){
     catch(e){if(e?.code==="declined")return}
   }
   copy(md,"Сценарий (скачивание здесь недоступно)");
+}
+
+/* ---------- Outsee ---------- */
+const OS = "Outsee";
+let mcpNs = null;
+const OS_IMG = [["auto","Как в проекте"],["nano-banana-pro","Nano Banana Pro — держит лицо"],["gpt-image-2","GPT Image 2"],["gpt-image-2-5-sunburst","GPT Image 2.5 Sunburst"],["gpt-image-2-5-flare","GPT Image 2.5 Flare"],["nano-banana-2","Nano Banana 2"],["nano-banana-2-lite","Nano Banana 2 Lite — дешёвый набросок"],["seedream-5-pro","Seedream 5 Pro — мягкая модерация"],["seedream-5-lite","Seedream 5 Lite"]];
+const OS_VID = [["auto","Как в проекте"],["seedance-2-0-global","Seedance 2.0"],["seedance-2-5","Seedance 2.5 — максимум качества"],["kling-3-0","Kling 3.0"],["kling-3-0-turbo","Kling 3.0 Turbo"],["minimax-h3","MiniMax H3"],["minimax-h3-max","MiniMax H3 Max — самая быстрая"],["flux-3","Flux 3"],["wan-3-0","Wan 3.0 — русская речь"],["veo-3-1-lite","Veo 3.1 Lite"],["kling-2-6","Kling 2.6 — дешёвый"],["seedance-2-0-mini","Seedance 2.0 Mini — черновик"]];
+const OS_Q = [["draft","Набросок"],["standard","Обычное"],["high","Для показа"],["max","Максимум"]];
+const imgModel = ()=>state.oImg!=="auto"?state.oImg:({nano:"nano-banana-pro",gptimg:"gpt-image-2",seedream:"seedream-5-pro"}[state.imggen]||"nano-banana-pro");
+const vidModel = ()=>state.oVid!=="auto"?state.oVid:({kling:"kling-3-0",veo:"veo-3-1-lite",seedance:"seedance-2-0-global",hailuo:"minimax-h3"}[state.gen]||"seedance-2-0-global");
+const osAR = ar=>({"4:5":"3:4","2.39:1":"16:9"}[ar]||ar);
+const sleep = ms=>new Promise(r=>setTimeout(r,ms));
+const plainVideo = p=>String(p||"").replace(/\[CHARACTER\]/g,"the character").trim();
+function slot(key,kind){state.media[key]=state.media[key]||{};return state.media[key][kind]=state.media[key][kind]||{status:"idle"}}
+const peek = (key,kind)=>state.media[key]?.[kind]||{status:"idle"};
+const sheetUrl = ()=>peek("sheet","image").url;
+function compact(o){for(const k in o) if(o[k]===undefined||o[k]===""||(Array.isArray(o[k])&&!o[k].length)) delete o[k];return o}
+
+function argsFor(key,kind){
+  const r=state.result, q=state.oQ;
+  if(key==="sheet") return compact({prompt:assemble(r.character_sheet_prompt,"sheet",true),aspect_ratio:"16:9",model:imgModel(),quality:q,intent:"референс лица героя для серии кадров"});
+  if(key==="studio"){
+    const s=state.studio, res=s.res; const hero=s.useHero&&r;
+    if(kind==="image"){
+      const prompt = hero ? assemble(res.image_prompt,"image",true,s.aspect) : clean(res.image_prompt.replace(/\[CHARACTER\]/g,"the character"))+"."+(res.negative?`\nNegative: ${res.negative}`:"");
+      return compact({prompt,aspect_ratio:s.aspect,model:imgModel(),quality:q,reference_urls:hero&&sheetUrl()?[sheetUrl()]:undefined});
+    }
+    return compact({prompt:plainVideo(res.video_prompt),aspect_ratio:s.aspect,duration_seconds:s.dur,model:vidModel(),quality:q,first_frame_url:peek("studio","image").url});
+  }
+  const i=Number(key.split("-")[1]), sh=r.shots[i];
+  if(kind==="image") return compact({prompt:assemble(sh.image_prompt,"image",true,osAR(state.ar)),aspect_ratio:osAR(state.ar),model:imgModel(),quality:q,
+    reference_urls:sheetUrl()&&/\[CHARACTER\]/.test(sh.image_prompt)?[sheetUrl()]:undefined,intent:"кадр раскадровки рекламного ролика"});
+  return compact({prompt:plainVideo(sh.video_prompt),aspect_ratio:osAR(state.ar),duration_seconds:Math.min(15,Math.max(3,sh.dur)),model:vidModel(),quality:q,first_frame_url:peek(key,"image").url});
+}
+
+function parseOutsee(res){
+  const p=res?.payload, o=(p&&typeof p==="object")?p:{};
+  const text=[typeof p==="string"?p:(o.message||""),...(res?.content||[]).filter(c=>c.type==="text").map(c=>c.text)].join(" ");
+  const items=o.items||o.result?.items||[];
+  let url=o.url||o.result_url||o.file_url||o.result?.url||items[0]?.url||o.entries?.[0]?.url;
+  if(!url){const m=text.match(/https:\/\/outsee\.io\/f\/[^\s"'<>)]+/);if(m)url=m[0]}
+  let id=o.id??o.job_id??o.task_id??o.work_id??o.result?.id??o.entries?.[0]?.id;
+  if(id==null){const m=text.match(/№\s?(\d+)/);if(m)id=Number(m[1])}
+  const status=String(o.status||"").toLowerCase();
+  const img=(res?.content||[]).find(c=>c.type==="image"&&c.data);
+  return {url,id:id!=null?Number(id):null,status,failed:/fail|error|cancel|reject/.test(status),
+    needConfirm:!url&&o.cost!=null&&(o.view==="plan"||o.view==="confirm"),cost:o.cost,balance:o.balance,message:o.message||text,
+    thumb:img?`data:${img.mimeType};base64,${img.data}`:null};
+}
+function osErr(e,write){
+  const c=e?.code;
+  if(c==="needs_reauth") return "Outsee нужно переподключить: claude.ai → Настройки → Коннекторы → Outsee.";
+  if(c==="server_not_connected") return "Outsee не подключён. Добавьте его в claude.ai → Настройки → Коннекторы (адрес https://outsee.io/mcp).";
+  if(c==="selection_required") return "У вас несколько коннекторов Outsee. Выберите один в окне Claude.";
+  if(c==="not_in_manifest") return "Outsee не разрешён для этой страницы. Разрешите его в окне Claude и попробуйте снова.";
+  if(c==="blocked_by_policy"||c==="approval_required") return "Outsee заблокирован настройками вашей организации.";
+  if(c==="tool_error") return "Outsee ответил: "+(e.message||"ошибка");
+  if(c==="not_granted"||c==="capability_disabled"||c==="capability_removed") return "Outsee недоступен в этом окне. Откройте приложение в Claude.";
+  if(write&&(c==="server_unavailable"||c==="upstream_error"||c==="cancelled")) return "Outsee не ответил вовремя. Работа могла запуститься: проверьте библиотеку Outsee, прежде чем запускать снова.";
+  return "Outsee сейчас не отвечает. Попробуйте ещё раз через минуту.";
+}
+const TOOL = {image:"create_image",video:"create_video"};
+async function osEstimate(key,kind){
+  if(!mcpNs){toast("Outsee работает, когда приложение открыто в Claude");return}
+  const s=slot(key,kind); Object.assign(s,{status:"estimating",err:""}); render();
+  try{
+    const res=await mcpNs.callTool(OS,TOOL[kind],{...argsFor(key,kind),estimate_only:true},{cache:false});
+    const r=parseOutsee(res);
+    Object.assign(s,{status:"confirm",cost:r.cost,balance:r.balance,confirmCost:undefined});
+  }catch(e){Object.assign(s,{status:"error",err:osErr(e,false)})}
+  save(); render();
+}
+async function osRun(key,kind){
+  const s=slot(key,kind); const args=argsFor(key,kind);
+  if(s.confirmCost!=null) args.confirm_cost=s.confirmCost;
+  Object.assign(s,{status:"running",start:Date.now(),err:"",url:undefined,id:undefined,thumb:undefined}); save(); render();
+  try{
+    const res=await mcpNs.callTool(OS,TOOL[kind],args,{cache:false});
+    const r=parseOutsee(res);
+    if(r.url) return osDone(s,r);
+    if(r.needConfirm){Object.assign(s,{status:"confirm",cost:r.cost,balance:r.balance,confirmCost:r.cost,note:"Работа дороже обычной, подтвердите цену."});save();render();return}
+    if(r.id==null){Object.assign(s,{status:"error",err:"Outsee не вернул номер работы. Проверьте библиотеку Outsee."});save();render();return}
+    s.id=r.id; save(); await osPoll(s);
+  }catch(e){Object.assign(s,{status:"error",err:osErr(e,true)});save();render()}
+}
+function osDone(s,r){
+  Object.assign(s,{status:"done",url:r.url,thumb:r.thumb||s.thumb,id:r.id??s.id,note:""});
+  save(); render(); toast("Outsee: готово");
+}
+async function osPoll(s){
+  s.status="running"; render();
+  for(let t=0;t<60;t++){
+    try{
+      const res=await mcpNs.callTool(OS,"check_status",{id:s.id},{cache:false});
+      const r=parseOutsee(res);
+      if(r.url) return osDone(s,r);
+      if(r.failed){Object.assign(s,{status:"error",err:r.message||"Outsee не смог выполнить работу."});save();render();return}
+    }catch(e){
+      if(e?.code==="tool_error"){Object.assign(s,{status:"error",err:osErr(e,false)});save();render();return}
+      if(!(e?.retryable||e?.code==="server_unavailable"||e?.code==="upstream_error")){Object.assign(s,{status:"error",err:osErr(e,false)});save();render();return}
+      await sleep(e?.retryAfterMs||4000);
+    }
+    await sleep(3000);
+  }
+  Object.assign(s,{status:"error",err:`Работа №${s.id} ещё идёт. Загляните в библиотеку Outsee позже.`}); save(); render();
+}
+function resumeJobs(){
+  for(const key in state.media) for(const kind in state.media[key]){
+    const s=state.media[key][kind];
+    if(s.status==="running"){ if(s.id!=null&&mcpNs) osPoll(s); else Object.assign(s,{status:"error",err:"Страница перезагрузилась во время запуска. Проверьте библиотеку Outsee."}) }
+    if(s.status==="estimating") s.status="idle";
+  }
+}
+function slotView(key,kind,opts={}){
+  const s=peek(key,kind), K=kind==="image"?"Фото":"Видео", da=`data-key="${key}" data-kind="${kind}"`;
+  let body;
+  if(opts.blocked) body=`<span class="st">${esc(opts.blocked)}</span>`;
+  else if(s.status==="estimating") body=`<span class="dot"></span><span class="st">Считаю цену…</span>`;
+  else if(s.status==="running") body=`<span class="dot"></span><span class="st">Генерирую${s.id!=null?" · работа №"+s.id:""} · <span class="mono" data-timer="${s.start||Date.now()}">0:00</span></span><span class="st">${kind==="video"?"видео занимает до 20 минут":"обычно до минуты"}</span>`;
+  else if(s.status==="confirm") body=`<span class="price">${s.cost!=null?s.cost+" ток.":"цена не указана"}${s.balance!=null?" · баланс "+s.balance:""}</span>${s.note?`<span class="st">${esc(s.note)}</span>`:""}<button class="btn small primary" data-os="run" ${da}>Запустить</button><button class="btn small" data-os="cancel" ${da}>Отмена</button>`;
+  else if(s.status==="done") body=`<span class="good">Готово</span><a href="${esc(s.url)}" target="_blank" rel="noopener">Открыть ${kind==="image"?"фото":"видео"} ↗</a><button class="btn small" data-os="link" ${da}>Ссылка</button><button class="btn small" data-os="est" ${da}>Ещё вариант</button>${s.thumb?`<img class="os-thumb" src="${s.thumb}" alt="">`:""}`;
+  else if(s.status==="error") body=`<span class="bad">${esc(s.err)}</span><button class="btn small" data-os="est" ${da}>Попробовать снова</button>`;
+  else body=`<button class="btn small" data-os="est" ${da} ${mcpNs?"":"disabled"}>${K} в Outsee</button>${opts.hint?`<span class="st">${esc(opts.hint)}</span>`:""}`;
+  return `<div class="os-row"><span class="k">${K}</span>${body}</div>`;
+}
+function osBlock(key,{video=true,imgHint=""}={}){
+  const hasImg=!!peek(key,"image").url;
+  return `<div class="os"><div class="os-h"><span class="label">Генерация в Outsee</span>${mcpNs?"":`<span class="muted" style="font-size:.78rem">доступно в Claude с подключённым Outsee</span>`}</div>
+    ${slotView(key,"image",{hint:imgHint})}
+    ${video?slotView(key,"video",{blocked:hasImg?"":"Сначала фото: видео начнётся с него, так сохраняется лицо."}):""}</div>`;
+}
+function osSettings(){
+  const sel=(k,list)=>`<select id="${k}" data-oset="${k}">${list.map(([v,l])=>`<option value="${v}" ${state[k]===v?"selected":""}>${esc(l)}</option>`).join("")}</select>`;
+  return `<div class="oset"><div class="field"><label for="oImg">Модель фото</label>${sel("oImg",OS_IMG)}</div><div class="field"><label for="oVid">Модель видео</label>${sel("oVid",OS_VID)}</div><div class="field"><label for="oQ">Качество</label>${sel("oQ",OS_Q)}</div></div>`;
+}
+
+/* ---------- студия: быстрый запрос ---------- */
+function studioPrompt(){
+  const s=state.studio, r=state.result, hero=s.useHero&&r;
+  return `${ROLE}
+
+Пользователь коротко описал, что хочет получить в ИИ-генераторе. Твоя задача — превратить это в детальный профессиональный промпт на английском.
+ЗАПРОС ПОЛЬЗОВАТЕЛЯ: ${s.req.trim()}
+ТИП: ${s.kind==="image"?"фото":"видео "+s.dur+" секунд (сначала генерируется стартовый кадр, затем он анимируется)"}. ФОРМАТ: ${s.aspect}.
+${rules.trim()?"ПРАВИЛА СТУДИИ (обязательны):\n"+rules.trim()+"\n":""}${hero?`ГЕРОЙ ПРОЕКТА уже описан отдельно, приложение подставит паспорт внешности, одежду и стиль само. Не описывай внешность и одежду героя, ставь метку [CHARACTER] там, где он в кадре. Стиль проекта: ${r.style?.look}.\n`:"Если в кадре человек, опиши его конкретно: возраст, черты лица, волосы, одежду, чтобы образ был однозначным. Метку [CHARACTER] не используй.\n"}
+image_prompt (80–160 слов): объект и действие, композиция, крупность, ракурс, объектив в мм, схема и направление света, палитра, фактуры и материалы, среда, настроение, фотореализм и натуральная текстура кожи. Добавь один точный режиссёрский ход, который делает кадр выразительнее.
+${s.kind==="video"?"video_prompt (40–90 слов): только движение, стартовый кадр уже задаёт картинку. Одно ясное действие, одно движение камеры, физика ткани и волос, микро-мимика. Если ролик длиннее 5 секунд, распиши по секундам.\n":"video_prompt: пустая строка.\n"}negative: что исключить (пластиковая кожа, деформация рук, текст, водяные знаки, CGI-вид и то, что важно для этого кадра).
+ФОРМАТ: ответь только JSON-объектом:
+{"title":"короткое название по-русски","image_prompt":"...","video_prompt":"...","negative":"...","notes":"1–2 предложения по-русски: какие режиссёрские решения ты принял"}`;
+}
+async function studioWrite(){
+  if(!state.studio.req.trim()){toast("Опишите, что нужно снять");return}
+  const data=await runJob("studio","Режиссёр пишет подробный промпт",studioPrompt());
+  if(!data) return;
+  if(!data.image_prompt){lastError=ERR.invalid_json;render();return}
+  state.studio.res={title:String(data.title||"Кадр"),image_prompt:String(data.image_prompt),video_prompt:String(data.video_prompt||""),negative:String(data.negative||""),notes:String(data.notes||"")};
+  delete state.media.studio; save(); render();
+}
+function studio(){
+  const s=state.studio, r=state.result, res=s.res;
+  const noGen = runtimeChecked && !sampleFn ? `<p class="note">Написание промптов и генерация работают, когда приложение открыто в Claude.</p>`:"";
+  return `<div class="stack">${jobBar()}
+  <section class="panel stack">
+    <div class="head"><span class="label">Студия Outsee</span><h2>Опишите кадр своими словами</h2><p class="muted">Режиссёр превратит запрос в подробный промпт, а Outsee сгенерирует фото или видео. Цену покажем до запуска.</p></div>
+    <div class="field"><label for="st-req">Запрос</label><textarea id="st-req" data-studio="req" rows="3" placeholder="Например: девушка в белом льняном платье идёт по пустому пляжу на рассвете, ветер в волосах">${esc(s.req)}</textarea></div>
+    <div class="grid2">
+      <div class="field"><span class="lab">Что делаем</span><div class="chips">${[["image","Фото"],["video","Видео"]].map(([v,l])=>`<button type="button" class="chip" data-sset="kind" data-val="${v}" aria-pressed="${s.kind===v}">${l}</button>`).join("")}</div></div>
+      <div class="field"><span class="lab">Формат</span><div class="chips">${["9:16","16:9","1:1","3:4","4:3"].map(a=>`<button type="button" class="chip mono" data-sset="aspect" data-val="${a}" aria-pressed="${s.aspect===a}">${a}</button>`).join("")}</div></div>
+      ${s.kind==="video"?`<div class="field"><span class="lab">Длительность</span><div class="chips">${[5,8,10,15].map(d=>`<button type="button" class="chip mono" data-sset="dur" data-val="${d}" aria-pressed="${s.dur===d}">${d} с</button>`).join("")}</div></div>`:""}
+      ${r?`<div class="field"><span class="lab">Герой</span><div class="chips"><button type="button" class="chip" data-sset="useHero" data-val="${!s.useHero}" aria-pressed="${s.useHero}">Герой проекта: ${esc(r.character?.name||"из раскадровки")}</button></div><span class="hint">${sheetUrl()?"Лист персонажа уже есть — лицо возьмём с него.":"Для точного лица сначала сделайте лист персонажа на вкладке «Проект»."}</span></div>`:""}
+    </div>
+    ${osSettings()}
+    <div class="actions"><button class="btn primary" data-act="studio" ${job?"disabled":""}>${res?"Переписать промпт":"Написать промпт"}</button></div>
+    ${noGen}
+  </section>
+  ${res?`<section class="panel stack">
+    <div class="head"><span class="label">Промпт</span><h3>${esc(res.title)}</h3>${res.notes?`<p class="muted">${esc(res.notes)}</p>`:""}</div>
+    <div class="field"><div class="prompt"><div class="ph"><label for="st-img">Фото · image${s.useHero&&r?" (паспорт героя и стиль добавятся при запуске)":""}</label><button class="btn small" data-copy="st-img">Копировать</button></div>
+      <textarea id="st-img" data-sres="image_prompt" rows="6" class="mono" style="font-size:.8rem">${esc(res.image_prompt)}</textarea></div></div>
+    ${s.kind==="video"?`<div class="field"><div class="prompt"><div class="ph"><label for="st-vid">Движение · video</label><button class="btn small" data-copy="st-vid">Копировать</button></div>
+      <textarea id="st-vid" data-sres="video_prompt" rows="4" class="mono" style="font-size:.8rem">${esc(res.video_prompt)}</textarea></div></div>`:""}
+    <div class="field"><label for="st-neg">Негатив</label><input type="text" id="st-neg" data-sres="negative" value="${esc(res.negative)}"></div>
+    ${osBlock("studio",{video:s.kind==="video"})}
+  </section>`:""}
+  </div>`;
 }
 
 /* ---------- схема крупности ---------- */
@@ -624,6 +832,7 @@ function step4(){
       <div class="facts"><div><span>Эмоция</span>${esc(s.emotion)}</div><div><span>Переход</span>${esc(s.transition)}</div><div><span>Звук</span>${esc(s.sound)}</div></div>
       <div class="prompt"><div class="ph"><span class="label">Стартовый кадр · image</span>${copyBtn("img-"+i)}</div><div class="code" id="img-${i}">${esc(assemble(s.image_prompt,"image"))}</div></div>
       <div class="prompt"><div class="ph"><span class="label">Анимация · video</span>${copyBtn("vid-"+i)}</div><div class="code" id="vid-${i}">${esc(assemble(s.video_prompt,"video"))}</div></div>
+      ${osBlock("shot-"+i)}
       <div class="redo"><input type="text" id="redo-${i}" data-redo="${i}" placeholder="Пожелание: например, «сделай ракурс смелее»" value="${esc(redoWish[i]||"")}" aria-label="Пожелание к кадру ${s.n}">
         <button class="btn small" data-act="redo" data-i="${i}" ${job?"disabled":""}>${job?.kind==="shot"&&job.shot===i?"Переснимаю…":"Переснять кадр"}</button></div>
     </div>
@@ -648,9 +857,11 @@ function step4(){
         <div class="bcard"><div class="bh"><b>Визуальный стиль</b>${copyBtn("bb-st")}</div><p class="kv">${esc(r.style?.look)}</p>
           <div class="code" id="bb-st">${esc(r.style?.style_block)}\n\nNegative: ${esc(r.style?.negative)}</div></div>
         <div class="bcard"><div class="bh"><b>Шаг 0: лист персонажа</b>${copyBtn("bb-sh")}</div><p class="kv muted">Сгенерируйте первым и используйте как референс лица во всех кадрах.</p>
-          <div class="code" id="bb-sh">${esc(assemble(r.character_sheet_prompt,"sheet"))}</div></div>
+          <div class="code" id="bb-sh">${esc(assemble(r.character_sheet_prompt,"sheet"))}</div>
+          ${osBlock("sheet",{video:false,imgHint:"Сделайте первым: лицо с него перейдёт во все кадры"})}</div>
       </div>
     </section>
+    <section class="panel stack"><div class="head"><span class="label">Outsee</span><h3>Генерация фото и видео</h3><p class="muted">Порядок: лист персонажа → фото кадра → видео из этого фото. Перед каждым запуском покажем цену в токенах Outsee.</p></div>${osSettings()}</section>
     <section class="panel stack"><div class="row" style="justify-content:space-between"><h3>Монтажная линейка</h3><div class="legend">${ACTS.map(a=>`<span><i style="background:${actColor(a)}"></i>${a}</span>`).join("")}</div></div>
       <div><div class="timeline">${tl}</div><div class="tl-scale">${ticks}</div></div>${sumWarn}</section>
     <section class="stack">${shots}</section>
@@ -670,9 +881,17 @@ function cheat(){
   <div class="cheat">${CHEAT.map(([t,items])=>`<section class="cgroup"><h3>${t}</h3><dl>${items.map(([ru,en,n])=>`<div class="it"><dt>${ru}</dt><button class="en" data-term="${esc(en)}">${esc(en)}</button><dd>${n}</dd></div>`).join("")}</dl></section>`).join("")}</div></div>`;
 }
 function render(){
+  const a=document.activeElement, fid=a&&a.id&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)?a.id:null;
+  const sel=fid&&a.selectionStart!=null?[a.selectionStart,a.selectionEnd]:null;
+  renderInner();
+  if(fid){const n=document.getElementById(fid);if(n){n.focus({preventScroll:true});if(sel&&n.setSelectionRange)try{n.setSelectionRange(sel[0],sel[1])}catch{}}}
+}
+setInterval(()=>document.querySelectorAll("[data-timer]").forEach(el=>{el.textContent=fmtT(Math.max(0,Math.round((Date.now()-Number(el.dataset.timer))/1000)))}),1000);
+function renderInner(){
   document.querySelectorAll(".tabs button").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===state.tab)));
   const app=$("#app");
   if(state.tab==="cheat"){app.innerHTML=cheat();return}
+  if(state.tab==="studio"){app.innerHTML=studio();updateJob();return}
   const noGen = runtimeChecked && !sampleFn ? `<p class="note" style="margin-bottom:16px">Генерация работает, когда приложение открыто в Claude. Пример проекта и шпаргалка доступны всегда.</p>`:"";
   app.innerHTML = stepper()+jobBar()+(state.step===1||state.step===2?"":"")+( [0,step1,step2,step3,step4][state.step]() )+(state.step<4?noGen:"");
   updateJob();
@@ -688,17 +907,27 @@ document.addEventListener("click",e=>{
   if(d.set){state[d.set]=["dur"].includes(d.set)?Number(d.val):d.val;save();render();return}
   if(d.ans!==undefined){const i=Number(d.ans);state.answers[i]=state.answers[i]===d.val?"":d.val;save();render();return}
   if(d.goto!==undefined){flashShot(Number(d.goto));return}
-  if(d.copy){const el=document.getElementById(d.copy);if(el)copy(el.textContent,"Промпт");return}
+  if(d.copy){const el=document.getElementById(d.copy);if(el)copy(el.value??el.textContent,"Промпт");return}
   if(d.term){copy(d.term,"Термин");return}
+  if(d.os){const k=d.key,kind=d.kind;
+    if(d.os==="est") osEstimate(k,kind);
+    else if(d.os==="run") osRun(k,kind);
+    else if(d.os==="cancel"){slot(k,kind).status=peek(k,kind).url?"done":"idle";save();render()}
+    else if(d.os==="link") copy(peek(k,kind).url,"Ссылка");
+    return}
+  if(d.sset){const s=state.studio;s[d.sset]=d.sset==="dur"?Number(d.val):d.sset==="useHero"?d.val==="true":d.val;
+    if(d.sset==="kind"||d.sset==="useHero") {s.res=null;delete state.media.studio}
+    save();render();return}
   switch(d.act){
     case "stop": job?.ctl.abort(); break;
     case "ask": askQuestions(); break;
     case "direct": state.questions=[];state.answers={};buildScript(); break;
     case "build": buildScript(); break;
+    case "studio": studioWrite(); break;
     case "redo": redoShot(Number(d.i)); break;
     case "copyall": copy(allPrompts(),"Все промпты"); break;
     case "md": downloadMd(); break;
-    case "new": {const keep={gen:state.gen,imggen:state.imggen,plang:state.plang,depth:state.depth};state=Object.assign(blankState(),keep);lastError="";save();render();window.scrollTo({top:0});break}
+    case "new": {const keep={gen:state.gen,imggen:state.imggen,plang:state.plang,depth:state.depth};state=migrate(Object.assign(blankState(),keep,{studio:state.studio}));lastError="";save();render();window.scrollTo({top:0});break}
   }
 });
 document.addEventListener("input",e=>{
@@ -708,6 +937,9 @@ document.addEventListener("input",e=>{
   else if(d.ansinput!==undefined){state.answers[Number(d.ansinput)]=t.value;save();
     t.closest(".q").querySelectorAll(".opt").forEach(o=>o.setAttribute("aria-pressed","false"))}
   else if(d.redo!==undefined){redoWish[Number(d.redo)]=t.value}
+  else if(d.studio){state.studio[d.studio]=t.value;save()}
+  else if(d.oset){state[d.oset]=t.value;save()}
+  else if(d.sres&&state.studio.res){state.studio.res[d.sres]=t.value;save()}
 });
 document.addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.dataset?.redo!==undefined){e.preventDefault();redoShot(Number(e.target.dataset.redo))}});
 
@@ -715,9 +947,9 @@ render();
 (async()=>{
   const use=window.claude?.use;
   if(use){
-    try{sampleFn=await window.claude.use("sample")}catch{}
-    try{downloadsNs=await window.claude.use("downloads")}catch{}
+    const u=n=>window.claude.use(n).catch(()=>null);
+    [sampleFn,downloadsNs,mcpNs]=await Promise.all([u("sample"),u("downloads"),u("mcp")]);
   }
-  runtimeChecked=true; render();
+  runtimeChecked=true; resumeJobs(); save(); render();
 })();
 </script>
