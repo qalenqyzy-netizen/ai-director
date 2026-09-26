@@ -1,0 +1,723 @@
+<title>AI-Режиссёр</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Prata&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#ECEEF2; --surface:#F8F9FB; --surface-2:#E2E5EA; --ink:#22252B; --ink-2:#5B616C; --ink-3:#8A909A;
+  --line:#D2D6DD; --accent:#8A2D5C; --accent-soft:#F2E4EB; --accent-ink:#FFFFFF;
+  --ok:#2F7A55; --warn:#A5621A; --err:#B3261E;
+  --serif:"Prata",Georgia,"Times New Roman",serif;
+  --sans:"Manrope",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#14161A; --surface:#1C1F24; --surface-2:#262A30; --ink:#E7E9ED; --ink-2:#A0A7B1; --ink-3:#747B86;
+    --line:#333840; --accent:#E385B3; --accent-soft:#3A2331; --accent-ink:#1B0F16;
+    --ok:#6FCB9A; --warn:#E4A865; --err:#F2847B;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#14161A; --surface:#1C1F24; --surface-2:#262A30; --ink:#E7E9ED; --ink-2:#A0A7B1; --ink-3:#747B86;
+  --line:#333840; --accent:#E385B3; --accent-soft:#3A2331; --accent-ink:#1B0F16;
+  --ok:#6FCB9A; --warn:#E4A865; --err:#F2847B;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55;margin:0;padding-inline:16px;padding-block:0 64px}
+.wrap{max-width:1080px;margin:0 auto}
+h1,h2,h3{font-family:var(--serif);font-weight:400;text-wrap:balance;margin:0;line-height:1.2}
+h2{font-size:1.65rem} h3{font-size:1.2rem}
+p{margin:0}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--ink-2)}
+.label{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);font-weight:600}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+
+/* header */
+.top{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding-block:20px 14px}
+.brand{display:flex;align-items:center;gap:12px}
+.brand h1{font-size:1.5rem}
+.brand small{display:block;font-family:var(--sans);font-size:.78rem;color:var(--ink-2)}
+.logo{width:40px;height:40px;color:var(--accent);flex:none}
+.tabs{display:flex;gap:4px;background:var(--surface-2);padding:4px;border-radius:999px}
+.tabs button{border:0;background:transparent;padding:7px 16px;border-radius:999px;cursor:pointer;font-weight:600;font-size:.88rem;color:var(--ink-2)}
+.tabs button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgb(0 0 0 / .08)}
+
+/* stepper */
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-block:6px 18px;list-style:none;padding:0}
+.steps button{width:100%;display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--surface);border-radius:var(--r);padding:10px 12px;cursor:pointer;text-align:left}
+.steps .num{font-family:var(--mono);font-size:.78rem;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--line);flex:none;color:var(--ink-2)}
+.steps .t{font-weight:600;font-size:.9rem}
+.steps button[aria-current="step"]{border-color:var(--accent);background:var(--accent-soft)}
+.steps button[aria-current="step"] .num{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.steps button.done .num{color:var(--accent);border-color:var(--accent)}
+@media (max-width:640px){.steps .t{font-size:.78rem}.steps button{padding:8px;gap:6px;flex-direction:column;align-items:flex-start}}
+
+/* panels */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:24px}
+@media (max-width:560px){.panel{padding:16px}}
+.stack{display:flex;flex-direction:column;gap:22px}
+.head{display:flex;flex-direction:column;gap:6px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.scard{border:1px solid var(--line);border-radius:var(--r);background:var(--bg);padding:16px;cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:8px}
+.scard .ic{width:34px;height:34px;color:var(--accent)}
+.scard b{font-family:var(--serif);font-weight:400;font-size:1.1rem}
+.scard span{font-size:.85rem;color:var(--ink-2)}
+.scard[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)}
+
+.field{display:flex;flex-direction:column;gap:6px}
+.field label,.field .lab{font-weight:600;font-size:.88rem}
+.field .hint{font-size:.8rem;color:var(--ink-3)}
+input[type=text],textarea,select{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:10px 12px}
+textarea{resize:vertical;min-height:72px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:6px 13px;cursor:pointer;font-size:.86rem}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.chip.mono{font-size:.8rem}
+.rules{border:1px dashed var(--accent);background:var(--accent-soft);border-radius:var(--r);padding:16px}
+
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:10px 16px;cursor:pointer;font-weight:600;font-size:.9rem;display:inline-flex;align-items:center;gap:8px}
+.btn:hover{border-color:var(--ink-3)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn.small{padding:5px 10px;font-size:.8rem;border-radius:6px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;border-top:1px solid var(--line);padding-top:18px}
+.actions .sp{flex:1}
+
+.note{border-radius:var(--r);padding:12px 14px;font-size:.88rem;background:var(--surface-2)}
+.note.err{background:color-mix(in srgb,var(--err) 12%,var(--surface));color:var(--ink);border:1px solid color-mix(in srgb,var(--err) 40%,transparent)}
+.note.ex{background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent)}
+
+/* job */
+.job{display:flex;align-items:center;gap:14px;flex-wrap:wrap;border:1px solid var(--accent);background:var(--accent-soft);border-radius:var(--r);padding:12px 16px;margin-bottom:16px}
+.job .reel{width:26px;height:26px;color:var(--accent);animation:spin 2.4s linear infinite;flex:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+.job .txt{flex:1;min-width:200px}
+.job .txt b{display:block}
+
+/* questions */
+.q{border:1px solid var(--line);border-radius:var(--r);padding:16px;display:flex;flex-direction:column;gap:10px;background:var(--bg)}
+.q .qn{font-family:var(--mono);color:var(--accent);font-size:.8rem}
+.q h4{margin:0;font-size:1rem;font-weight:700}
+.q .why{font-size:.85rem;color:var(--ink-2)}
+.opt{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 12px;text-align:left;cursor:pointer;font-size:.88rem}
+.opt[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)}
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px}
+
+/* result */
+.hero-r{display:flex;flex-direction:column;gap:10px}
+.hero-r h2{font-size:2rem}
+.logline{font-size:1.08rem;max-width:65ch}
+.concept{max-width:70ch;color:var(--ink-2)}
+.arc{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:0;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.arc > div{padding:12px 14px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:4px;background:var(--bg)}
+.arc > div:last-child{border-right:0}
+.arc b{font-family:var(--serif);font-weight:400;font-size:1.02rem}
+.arc .mono{font-size:.76rem;color:var(--accent)}
+.arc p{font-size:.84rem;color:var(--ink-2)}
+
+.bible{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:12px}
+.bcard{border:1px solid var(--line);border-radius:var(--r);padding:16px;display:flex;flex-direction:column;gap:10px;background:var(--bg)}
+.bcard .bh{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.bcard .kv{font-size:.86rem}
+.bcard .kv b{font-weight:600}
+.code{font-family:var(--mono);font-size:.78rem;line-height:1.6;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto}
+
+.timeline{display:flex;height:54px;border-radius:8px;overflow:hidden;border:1px solid var(--line);gap:2px;background:var(--line)}
+.timeline button{border:0;min-width:22px;cursor:pointer;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;padding:4px 7px;font-family:var(--mono);font-size:.72rem;color:var(--ink);overflow:hidden;white-space:nowrap}
+.timeline button:hover{filter:brightness(.95)}
+.tl-scale{display:flex;justify-content:space-between;font-family:var(--mono);font-size:.7rem;color:var(--ink-3);margin-top:4px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:.78rem;color:var(--ink-2)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+
+.shot{border:1px solid var(--line);border-radius:14px;background:var(--bg);display:grid;grid-template-columns:200px 1fr;overflow:hidden;scroll-margin-top:16px}
+.shot.flash{box-shadow:0 0 0 2px var(--accent)}
+.shot aside{background:var(--surface);border-right:1px solid var(--line);padding:16px;display:flex;flex-direction:column;gap:12px}
+.shot .no{font-family:var(--serif);font-size:2.2rem;line-height:1;color:var(--accent)}
+.shot .tc{font-family:var(--mono);font-size:.8rem}
+.frame{border:1.5px solid var(--ink-2);border-radius:3px;height:84px;max-width:100%;background:var(--bg);color:var(--ink-2);overflow:hidden;align-self:flex-start}
+.frame svg{display:block;width:100%;height:100%}
+.meta{display:flex;flex-direction:column;gap:6px;font-size:.82rem}
+.meta div{display:flex;flex-direction:column}
+.meta span{color:var(--ink-3);font-size:.7rem;text-transform:uppercase;letter-spacing:.07em;font-weight:600}
+.shot .body{padding:18px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.pill{display:inline-block;font-size:.72rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:3px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
+.action{font-size:1rem}
+.whybox{border-left:3px solid var(--accent);padding:4px 0 4px 12px;font-size:.9rem}
+.whybox .label{color:var(--accent)}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;font-size:.85rem}
+.facts span{display:block;color:var(--ink-3);font-size:.7rem;text-transform:uppercase;letter-spacing:.07em;font-weight:600}
+.prompt{display:flex;flex-direction:column;gap:6px}
+.prompt .ph{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.redo{display:flex;gap:8px;flex-wrap:wrap;align-items:stretch;border-top:1px dashed var(--line);padding-top:12px}
+.redo input{flex:1;min-width:200px}
+@media (max-width:720px){.shot{grid-template-columns:1fr}.shot aside{border-right:0;border-bottom:1px solid var(--line);flex-direction:row;flex-wrap:wrap;align-items:flex-start}.shot aside .meta{flex:1;min-width:160px}}
+
+.tips{counter-reset:t;display:flex;flex-direction:column;gap:8px;padding:0;margin:0;list-style:none}
+.tips li{display:flex;gap:10px;font-size:.92rem}
+.tips li::before{counter-increment:t;content:counter(t);font-family:var(--mono);font-size:.78rem;color:var(--accent);border:1px solid var(--accent);border-radius:50%;width:22px;height:22px;display:grid;place-items:center;flex:none;margin-top:1px}
+
+/* cheat */
+.cheat{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}
+.cgroup{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:10px}
+.cgroup dl{margin:0;display:flex;flex-direction:column}
+.cgroup .it{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:8px 0;border-top:1px solid var(--line)}
+.cgroup dt{font-weight:700;font-size:.9rem}
+.cgroup .en{font-family:var(--mono);font-size:.74rem;color:var(--accent);text-align:right;cursor:pointer;background:none;border:0;padding:0}
+.cgroup dd{grid-column:1/-1;margin:0;font-size:.84rem;color:var(--ink-2)}
+
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:.88rem;z-index:10;max-width:calc(100% - 32px)}
+.empty{text-align:center;padding:40px 16px;display:flex;flex-direction:column;gap:12px;align-items:center}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 40 40" aria-hidden="true"><rect x="5" y="16" width="30" height="19" rx="2" fill="none" stroke="currentColor" stroke-width="2.2"/><g transform="rotate(-14 5 16)"><rect x="5" y="8" width="30" height="7" rx="1.5" fill="currentColor"/><path d="M11 8l-4 7M18 8l-4 7M25 8l-4 7M32 8l-4 7" stroke="var(--surface)" stroke-width="2.2"/></g><path d="M10 22h20M10 28h12" stroke="currentColor" stroke-width="1.6" opacity=".5"/></svg>
+      <div><h1>AI-Режиссёр</h1><small>раскадровка и промпты с единым героем</small></div>
+    </div>
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tab-project" data-tab="project">Проект</button>
+      <button role="tab" id="tab-cheat" data-tab="cheat">Шпаргалка режиссёра</button>
+    </div>
+  </header>
+  <main id="app"></main>
+</div>
+<div id="toast" class="toast" hidden></div>
+
+<script>
+/* ---------- справочники ---------- */
+const SECTIONS = {
+  ad:{name:"Реклама бренда",desc:"Имиджевый или продающий ролик для крупного бренда",icon:'<path d="M6 26V14l18-7v26L6 26z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M24 12c4 1 5 3 5 7s-1 6-5 7M9 26l2 7h5l-2-6" fill="none" stroke="currentColor" stroke-width="2"/>',
+    logic:"Хук за 1–3 секунды, знакомство с героиней и миром бренда, рост эмоции, кульминация с продуктом, пэкшот и место под логотип. Продукт — отдельный герой: минимум один макро-кадр фактуры и один кадр продукта в действии. Люксовая эстетика: сдержанное движение, мотивированный свет, воздух в кадре."},
+  fashion:{name:"Одежда и fashion",desc:"Бельё, одежда, аксессуары: ткань, посадка, движение",icon:'<path d="M13 6l-7 5 3 6 4-2v18h14V15l4 2 3-6-7-5c-1 3-3 4-7 4s-6-1-7-4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
+    logic:"Ткань «живёт»: движение, физика шёлка, кружева, трикотажа, макро фактуры и швов. Посадка на теле с разных сторон, каждый ракурс мотивирован действием. Для белья и купальников — эстетика и вкус, без вульгарности. Смена ракурса каждые 2–4 секунды."},
+  film:{name:"Мини-кино",desc:"Короткая история с героем, конфликтом и развязкой",icon:'<rect x="5" y="9" width="22" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M27 15l7-4v14l-7-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="18" r="3" fill="currentColor"/>',
+    logic:"Трёхактная структура, продукт в сюжете. Монтажная грамматика: правила 180° и 30°, восьмёрка в диалогах, перебивки, монтаж по движению и по взгляду. Чем сильнее эмоция, тем крупнее план."},
+  cartoon:{name:"Мультфильм",desc:"Анимация по 12 принципам Disney",icon:'<circle cx="19" cy="20" r="11" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="10" cy="9" r="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="28" cy="9" r="5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M14 23c2 3 8 3 10 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+    logic:"12 принципов анимации Disney: сжатие и растяжение, подготовка к действию, сценичность, захлёст, замедление, дуги, вторичное действие, тайминг, утрирование, «твёрдый» рисунок, обаяние. Читаемый силуэт, единый стиль рендера."}
+};
+const VGEN = [["universal","Универсально",""],["veo","Google Veo","понимает кинотермины и описание звука; одно действие и конкретная камера"],["kling","Kling","короткие ясные фразы, одно действие на клип, явно назвать движение камеры, физика ткани"],["sora","OpenAI Sora","описательный кинопромпт, последовательность событий внутри клипа"],["runway","Runway","сначала движение камеры, затем объект и действие; стартовый кадр задаёт картинку"],["hailuo","Hailuo / MiniMax","хорошо слушается камерных команд вроде [Push in], [Pan left]"],["seedance","Seedance","чёткое действие и движение камеры, один план на клип"],["higgsfield","Higgsfield","назвать конкретный тип движения камеры: dolly in, crane up, orbit"]];
+const IGEN = [["universal","Универсально",""],["mj","Midjourney","короткие визуальные фразы; параметры --ar и --style raw приложение добавит само"],["nano","Nano Banana / Gemini","естественный язык полными предложениями"],["gptimg","GPT Image","подробное описание сцены полными предложениями"],["flux","Flux","подробный описательный промпт с фототехническими деталями"],["seedream","Seedream","ясное описание сцены, композиции и света"]];
+const DURS = [15,30,45,60,90];
+const ARS = ["9:16","16:9","4:5","1:1","2.39:1"];
+const SHOTPLAN = {15:[6,"2,5"],30:["7–8","4"],45:[10,"4,5"],60:[13,"4,5"],90:[16,"5,5"]};
+const BRIEF_FIELDS = [
+  ["brand","Бренд и продукт","Бельевой бренд, новая коллекция шёлкового белья",false],
+  ["goal","Цель ролика","Запуск коллекции, продажи в соцсетях",false],
+  ["hero","Герой","Внешность, возраст, черты лица, волосы, фигура. Станет «паспортом героя».",true],
+  ["ward","Гардероб / продукт в кадре","Комплект из шампанского шёлка, халат цвета слоновой кости",true],
+  ["loc","Локация","Светлая квартира, высокие окна, утро",false],
+  ["mood","Настроение и эмоция","Нежность, уверенность, время для себя",false],
+  ["aud","Аудитория","Женщины 25–40, ценят качество",false],
+  ["ref","Референсы и стиль","Итальянская люксовая реклама, мягкий утренний свет, плёночное зерно",true]
+];
+const ACTS = ["Хук","Завязка","Развитие","Кульминация","Финал"];
+
+/* ---------- пример проекта ---------- */
+function exampleState(){
+  return {
+    tab:"project", step:4, section:"fashion", dur:30, ar:"9:16", gen:"kling", imggen:"nano", plang:"en", depth:"standard",
+    brief:{brand:"Maison Lune — шёлковое бельё, новая коллекция «Lune du Matin»",goal:"Запуск коллекции, продажи в Instagram и TikTok",
+      hero:"Амира, 28 лет, смешанная казахско-средиземноморская внешность, скулы, тёмные миндалевидные глаза, родинка над губой, каштановые волосы до плеч",
+      ward:"Комплект из шампанского шёлка с кружевной кромкой, длинный халат цвета слоновой кости",loc:"Светлая квартира в итальянском стиле, высокие окна, утро",
+      mood:"Нежность, уверенность, время для себя",aud:"Женщины 25–40, ценят качество",ref:"Итальянская люксовая реклама, мягкий утренний свет, плёночное зерно"},
+    questions:[
+      {q:"Что для героини главное в этом утре?",why:"Это задаёт эмоциональную дугу и то, ради чего она смотрит в камеру в финале.",options:["Тишина и время только для себя","Подготовка к важному дню","Медленное возвращение к себе после сна"]},
+      {q:"Как показать бельё без вульгарности?",why:"От ответа зависят ракурсы, крупности и сколько тела видно в кадре.",options:["Через фактуру и макро, тело — намёком","Через отражение в зеркале","Через халат, который то скрывает, то раскрывает"]},
+      {q:"Где пик эмоции ролика?",why:"Кульминация должна совпасть с продуктом.",options:["У зеркала: героиня нравится себе","На кровати: свобода и лёгкость","У окна: встреча с солнцем"]},
+      {q:"Какой финал нужен бренду?",why:"Финальный кадр держит логотип и слоган.",options:["Взгляд в камеру и место под логотип","Пэкшот комплекта на шёлке","Героиня уходит в свет"]}
+    ],
+    answers:{0:"Тишина и время только для себя",1:"Через фактуру и макро, тело — намёком",2:"У зеркала: героиня нравится себе",3:"Взгляд в камеру и место под логотип"},
+    isExample:true,
+    result:{
+      title:"Утро, которое принадлежит тебе",
+      logline:"Героиня забирает у мира одно тихое утро, и шёлк Maison Lune становится её вторым дыханием.",
+      concept:"Мы снимаем не бельё, а ощущение утра без спешки. Камера двигается медленно, как дыхание, свет всегда приходит из одного высокого окна. Шёлк появляется раньше героини и остаётся с ней до финального взгляда в камеру.",
+      structure:[{act:"Хук",time:"0–3 с",goal:"Заворожить фактурой шёлка до того, как зритель поймёт, что это"},{act:"Завязка",time:"3–11 с",goal:"Познакомить с Амирой и её светлым миром"},{act:"Развитие",time:"11–16 с",goal:"Дать героине свободу и показать посадку белья"},{act:"Кульминация",time:"16–25 с",goal:"Пик эмоции у зеркала и макро продукта"},{act:"Финал",time:"25–30 с",goal:"Взгляд в камеру и место под логотип"}],
+      character:{name:"Амира",
+        id_block:"28-year-old woman of mixed Kazakh and Mediterranean heritage, oval face with high cheekbones, almond-shaped dark brown eyes, straight thick natural brows, small beauty mark above the left upper lip, light olive skin with visible pores and faint freckles on the nose bridge, full lips with a defined cupid's bow, shoulder-length dark chestnut hair with soft loose waves and a middle part, slim athletic build, minimal dewy makeup",
+        wardrobe:"champagne silk bralette and matching high-waist silk briefs with thin ivory lace trim, long ivory silk robe with wide sleeves, thin gold chain necklace",
+        emotion_arc:"предвкушение → спокойствие → нежность → свобода → уверенность"},
+      style:{look:"Итальянская люксовая реклама утром: мягкое окно, шампань и слоновая кость, плёночное зерно",
+        style_block:"photorealistic cinematic luxury commercial, shot on ARRI Alexa Mini LF with vintage Cooke S4 primes, soft morning window light from frame left as key, warm bounce fill, gentle backlight halo, palette of champagne, ivory, warm beige and soft grey, fine 35mm film grain, natural skin texture with visible pores, shallow depth of field",
+        negative:"plastic skin, airbrushed face, changing face, different person, extra fingers, deformed hands, warped fabric, melted lace, text, watermark, logo, CGI look, flicker, oversaturated colors, vulgar pose"},
+      character_sheet_prompt:"Character reference sheet of [CHARACTER]: front view, three-quarter view, left and right profile, neutral calm expression, head and shoulders, seamless light grey studio background, even soft light, same person in every view, high skin detail",
+      shots:[
+        {n:1,time:"0:00–0:03",dur:3,act:"Хук",size:"Деталь / макро",angle:"На уровне ткани, почти касаясь",move:"Медленный проезд вбок",lens:"100mm macro",light:"Контровой утренний свет из окна",action:"Солнечный луч скользит по складкам шампанского шёлка, ткань дышит от сквозняка.",emotion:"Предвкушение",why:"Самый необычный кадр ролика: зритель ещё не понял, что это, но фактура уже держит взгляд. Продукт становится героем с первой секунды.",transition:"Монтаж по движению: складка шёлка переходит в движение занавески",sound:"Тихий шорох шёлка, первая нота фортепиано",
+          image_prompt:"Extreme macro of champagne silk fabric folds on a bed, a thin ray of morning sunlight grazing the surface, visible weave and soft sheen, dust particles glowing in the light, no people",
+          video_prompt:"Slow lateral slide across the silk folds, the fabric gently ripples from a soft breeze, light shimmers along the sheen, 3 seconds, one continuous shot"},
+        {n:2,time:"0:03–0:07",dur:4,act:"Завязка",size:"Общий план",angle:"Уровень глаз, сбоку",move:"Очень медленный наезд",lens:"35mm",light:"Мягкий рисующий от высокого окна слева",action:"Амира в халате стоит у высокого окна, открывает створку и вдыхает утро.",emotion:"Спокойствие",why:"Знакомим с героиней и её миром: светлая квартира, воздух, время для себя. Общий план задаёт пространство перед крупными планами.",transition:"Прямая склейка со сменой крупности, правило 30°",sound:"Птицы за окном, фортепиано набирает мелодию",
+          image_prompt:"Wide shot of [CHARACTER] standing by a tall window in a bright minimalist Italian apartment at sunrise, one hand opening the window, sheer curtains, soft morning haze, eye level from the side, lots of air in the frame",
+          video_prompt:"[CHARACTER] slowly opens the window and takes a calm deep breath, sheer curtains lift in the breeze, silk robe moves softly, very slow push-in, 4 seconds"},
+        {n:3,time:"0:07–0:11",dur:4,act:"Завязка",size:"Крупный план",angle:"Уровень глаз, 3/4",move:"Статика",lens:"85mm",light:"Рембрандт от окна слева",action:"Она закрывает глаза и едва заметно улыбается солнцу.",emotion:"Нежность",why:"Чем сильнее эмоция, тем крупнее план: зритель впервые видит лицо и привязывается к героине. Это кадр-эталон для сохранения лица.",transition:"Склейка по взгляду: она опускает глаза, и мы видим кровать",sound:"Дыхание, мягкий пэд",
+          image_prompt:"Close-up of [CHARACTER] in three-quarter view, eyes closed, a faint smile, warm window light from frame left forming a Rembrandt triangle on the cheek, natural skin texture, a few hair strands catching the light, shallow depth of field",
+          video_prompt:"[CHARACTER] keeps her eyes closed, then slowly opens them and smiles softly, subtle micro-expressions, a strand of hair moves in the breeze, locked-off camera, 4 seconds"},
+        {n:4,time:"0:11–0:16",dur:5,act:"Развитие",size:"Средний план",angle:"Сверху вниз",move:"Медленный подъём камеры вверх",lens:"35mm",light:"Рассеянный свет от окна, с той же стороны",action:"Амира ложится на смятые простыни, халат раскрывается вокруг неё, как лепестки.",emotion:"Свобода",why:"Творческий ракурс: вид сверху превращает кровать в композицию, а халат в цветок. Показываем посадку комплекта целиком и со вкусом.",transition:"Монтаж по движению: поворот головы переходит в зеркало",sound:"Музыка раскрывается, лёгкий смех на выдохе",
+          image_prompt:"Top-down medium shot of [CHARACTER] lying on white rumpled linen sheets, the silk robe spread open around her like petals revealing the silk bralette set, one arm above her head, relaxed and tasteful, soft diffused window light from frame left",
+          video_prompt:"Camera slowly rises straight up above [CHARACTER] as she stretches and turns her head toward the window, the silk robe settles naturally on the sheets, 5 seconds"},
+        {n:5,time:"0:16–0:21",dur:5,act:"Кульминация",size:"Средне-крупный план",angle:"Через отражение в зеркале",move:"Медленный облёт на 20°",lens:"50mm",light:"Контровой из окна, рисующий слева",action:"Она завязывает халат перед зеркалом, ловит своё отражение и уверенно поправляет ворот.",emotion:"Уверенность",why:"Пик эмоции совпадает с продуктом: героиня видит себя в белье бренда и нравится себе. Зеркало добавляет второй план и смысл «время для себя».",transition:"Склейка на деталь: рука у ворота переходит в макро кружева",sound:"Кульминация мелодии",
+          image_prompt:"Medium close-up of [CHARACTER] seen through a large vintage mirror, tying the ivory silk robe over the champagne bralette, meeting her own eyes in the reflection with a confident look, window backlight creating a glow on her hair",
+          video_prompt:"[CHARACTER] tightens the robe belt and adjusts the collar while looking at her reflection, a slight confident smile, slow 20-degree arc around the mirror, 5 seconds"},
+        {n:6,time:"0:21–0:25",dur:4,act:"Кульминация",size:"Деталь / макро",angle:"Сбоку, почти в упор",move:"Статика, перевод фокуса",lens:"100mm macro",light:"Мягкий контровой",action:"Пальцы скользят по кружевной кромке, фокус переходит с кружева на шёлк.",emotion:"Чувственность",why:"Продукт как отдельный герой: макро фактуры и швов показывает качество, за которое платят.",transition:"Отъезд в финальный план",sound:"Музыка стихает, шорох ткани",
+          image_prompt:"Macro detail of the ivory lace trim on the champagne silk bralette, the fingertips of [CHARACTER] gently touching the edge, visible stitching and silk sheen, warm backlight, very shallow depth of field",
+          video_prompt:"Fingertips of [CHARACTER] slowly trace along the lace edge, the silk shifts with her breathing, rack focus from lace to silk, locked-off camera, 4 seconds"},
+        {n:7,time:"0:25–0:30",dur:5,act:"Финал",size:"Средний план",angle:"Уровень глаз, фронтально",move:"Медленный отъезд",lens:"50mm",light:"Мягкий рисующий от окна, отражённый заполняющий",action:"Амира поворачивается к камере, смотрит прямо в объектив и улыбается. Справа много воздуха под логотип и слоган.",emotion:"Спокойная уверенность",why:"Взгляд в камеру — прямое обращение к зрительнице. Свободное место справа отдано логотипу Maison Lune и слогану.",transition:"Затемнение, логотип",sound:"Финальный аккорд, тишина под логотип",
+          image_prompt:"Medium shot of [CHARACTER] in the tied ivory silk robe standing by the window, turning to look directly into the camera with a calm confident smile, placed on the left third of the frame, clean softly lit wall on the right for a logo, eye level",
+          video_prompt:"[CHARACTER] turns toward the camera and holds eye contact with a gentle smile, hair settles, very slow pull-back, 5 seconds, ends on a still moment"}
+      ],
+      tips:["Сначала сгенерируйте лист персонажа (Шаг 0) и выберите одно лицо. Используйте его как референс во всех кадрах.","Начните с кадра 3: крупный план лица станет эталоном. Остальные кадры сверяйте с ним.","Для каждого кадра сначала делайте стартовое изображение, потом анимацию (image-to-video) с тем же seed и настройками.","Свет во всех кадрах идёт слева от окна. Проверяйте направление теней у соседних кадров перед монтажом.","В кадрах 4 и 6 следите за кружевом: если кромка «плывёт», перегенерируйте только статичный кадр, а движение делайте минимальным."]
+    }
+  };
+}
+function blankState(){
+  return {tab:"project",step:1,section:"ad",dur:30,ar:"9:16",gen:"universal",imggen:"universal",plang:"en",depth:"standard",
+    brief:{brand:"",goal:"",hero:"",ward:"",loc:"",mood:"",aud:"",ref:""},questions:[],answers:{},result:null,isExample:false};
+}
+
+/* ---------- хранение ---------- */
+const KEY="ai-director:project:v1", RKEY="ai-director:rules:v1";
+function load(){try{const s=JSON.parse(localStorage.getItem(KEY));return s&&s.brief?s:null}catch{return null}}
+let saveT;
+function save(){clearTimeout(saveT);saveT=setTimeout(()=>{try{localStorage.setItem(KEY,JSON.stringify(state))}catch{}},250)}
+function loadRules(){try{return localStorage.getItem(RKEY)||""}catch{return ""}}
+function saveRules(v){try{localStorage.setItem(RKEY,v)}catch{}}
+
+let state = load() || exampleState();
+let rules = loadRules();
+let job = null;          // {kind,label,ctl,chars,start,shot}
+let lastError = "";
+let sampleFn = null, downloadsNs = null, runtimeChecked = false;
+const redoWish = {};
+
+/* ---------- утилиты ---------- */
+const $ = s=>document.querySelector(s);
+const esc = s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function toast(msg){const t=$("#toast");t.textContent=msg;t.hidden=false;clearTimeout(t._t);t._t=setTimeout(()=>t.hidden=true,2600)}
+async function copy(text,what){
+  try{await navigator.clipboard.writeText(text);toast((what||"Текст")+" скопирован")}
+  catch{
+    const ta=document.createElement("textarea");ta.value=text;ta.style.position="fixed";ta.style.opacity="0";document.body.appendChild(ta);ta.select();
+    let ok=false;try{ok=document.execCommand("copy")}catch{}
+    ta.remove();toast(ok?(what||"Текст")+" скопирован":"Не удалось скопировать: выделите текст вручную");
+  }
+}
+const fmtT = s=>Math.floor(s/60)+":"+String(s%60).padStart(2,"0");
+const secName = ()=>SECTIONS[state.section].name;
+const genName = (list,id)=>(list.find(g=>g[0]===id)||list[0])[1];
+const genHint = (list,id)=>(list.find(g=>g[0]===id)||list[0])[2];
+
+/* ---------- сборка промптов ---------- */
+const clean = s=>String(s||"").trim().replace(/[.\s]+$/,"");
+function assemble(part,kind){
+  const r=state.result; if(!r) return "";
+  const en = state.plang==="en";
+  const L = en?{c:"Character (keep identical in every shot)",w:"Wearing",s:"Style",a:"Aspect ratio",n:"Negative",tag:"the character"}
+              :{c:"Персонаж (сохранять идентичным в каждом кадре)",w:"Одежда",s:"Стиль",a:"Формат кадра",n:"Негатив",tag:"персонаж"};
+  const ar = kind==="sheet"?"16:9":state.ar;
+  const lines=[clean(String(part||"").replace(/\[CHARACTER\]/g,L.tag))+".", `${L.c}: ${clean(r.character?.id_block)}.`];
+  if(kind!=="sheet") lines.push(`${L.w}: ${clean(r.character?.wardrobe)}.`);
+  lines.push(`${L.s}: ${clean(r.style?.style_block)}.`, `${L.a} ${ar}.`);
+  if(kind!=="video" && state.imggen==="mj") lines.push(`--ar ${ar==="2.39:1"?"239:100":ar} --style raw`);
+  lines.push(`${L.n}: ${clean(r.style?.negative)}`);
+  return lines.join("\n");
+}
+function allPrompts(){
+  const r=state.result; if(!r) return "";
+  const out=[`${r.title}\n`, `ШАГ 0 — ЛИСТ ПЕРСОНАЖА\n${assemble(r.character_sheet_prompt,"sheet")}\n`];
+  r.shots.forEach(s=>out.push(`КАДР ${s.n} · ${s.time} · ${s.dur} с\nIMAGE:\n${assemble(s.image_prompt,"image")}\n\nVIDEO:\n${assemble(s.video_prompt,"video")}\n`));
+  return out.join("\n");
+}
+function toMarkdown(){
+  const r=state.result, b=state.brief;
+  let md=`# ${r.title}\n\n**Логлайн:** ${r.logline}\n\n**Концепция:** ${r.concept}\n\n`;
+  md+=`**Раздел:** ${secName()} · **Длительность:** ${state.dur} с · **Формат:** ${state.ar} · **Видео:** ${genName(VGEN,state.gen)} · **Кадры:** ${genName(IGEN,state.imggen)}\n\n`;
+  md+=`## Бриф\n\n`+BRIEF_FIELDS.filter(f=>b[f[0]]).map(f=>`- **${f[1]}:** ${b[f[0]]}`).join("\n")+"\n\n";
+  md+=`## Драматургия\n\n| Акт | Время | Задача |\n|---|---|---|\n`+(r.structure||[]).map(a=>`| ${a.act} | ${a.time} | ${a.goal} |`).join("\n")+"\n\n";
+  md+=`## Библия проекта\n\n### Паспорт героя: ${r.character?.name||""}\n\n${r.character?.id_block}\n\n**Гардероб:** ${r.character?.wardrobe}\n\n**Эмоциональная дуга:** ${r.character?.emotion_arc}\n\n`;
+  md+=`### Визуальный стиль\n\n${r.style?.look}\n\n\`\`\`\n${r.style?.style_block}\n\`\`\`\n\n**Негатив:** ${r.style?.negative}\n\n`;
+  md+=`### Шаг 0: лист персонажа\n\n\`\`\`\n${assemble(r.character_sheet_prompt,"sheet")}\n\`\`\`\n\n## Раскадровка\n\n`;
+  r.shots.forEach(s=>{
+    md+=`### Кадр ${s.n} · ${s.time} · ${s.dur} с · ${s.act}\n\n- **План:** ${s.size}\n- **Ракурс:** ${s.angle}\n- **Движение:** ${s.move}\n- **Оптика:** ${s.lens}\n- **Свет:** ${s.light}\n- **Действие:** ${s.action}\n- **Зачем этот кадр:** ${s.why}\n- **Эмоция:** ${s.emotion}\n- **Переход:** ${s.transition}\n- **Звук:** ${s.sound}\n\n**Image:**\n\n\`\`\`\n${assemble(s.image_prompt,"image")}\n\`\`\`\n\n**Video:**\n\n\`\`\`\n${assemble(s.video_prompt,"video")}\n\`\`\`\n\n`;
+  });
+  md+=`## Советы\n\n`+(r.tips||[]).map(t=>`- ${t}`).join("\n")+"\n";
+  return md;
+}
+
+/* ---------- запросы к Claude ---------- */
+const ROLE = "Ты — опытный режиссёр рекламы и оператор-постановщик, который работает с ИИ-генераторами изображений и видео. Ты знаешь драматургию, монтажную грамматику (правила 180° и 30°, чередование крупностей, монтаж по движению и по взгляду, восьмёрка, перебивки), крупности, ракурсы, движение камеры, оптику (24/35/50/85/100 macro) и схемы света. Каждый кадр у тебя мотивирован смыслом. Пишешь понятно и легко, по-русски, без канцелярита.";
+function context(){
+  const b=state.brief;
+  let t=`${ROLE}\n\nРАЗДЕЛ: ${secName()}.\nСпецифика раздела: ${SECTIONS[state.section].logic}\n`;
+  if(rules.trim()) t+=`\nПРАВИЛА СТУДИИ (обязательны к соблюдению, это методика автора):\n${rules.trim()}\n`;
+  t+=`\nБРИФ:\n- Длительность: ${state.dur} секунд\n- Формат кадра: ${state.ar}\n- Генератор видео: ${genName(VGEN,state.gen)}${genHint(VGEN,state.gen)?" ("+genHint(VGEN,state.gen)+")":""}\n- Генератор кадров: ${genName(IGEN,state.imggen)}${genHint(IGEN,state.imggen)?" ("+genHint(IGEN,state.imggen)+")":""}\n`;
+  BRIEF_FIELDS.forEach(f=>t+=`- ${f[1]}: ${b[f[0]]?.trim()||"не указано, реши сам"}\n`);
+  return t;
+}
+function answersText(){
+  if(!state.questions.length) return "";
+  return "\nОТВЕТЫ НА УТОЧНЯЮЩИЕ ВОПРОСЫ:\n"+state.questions.map((q,i)=>`- ${q.q}\n  Ответ: ${state.answers[i]?.trim()||"на усмотрение режиссёра"}`).join("\n")+"\n";
+}
+function questionsPrompt(){
+  return context()+`
+ЗАДАЧА: перед съёмкой задай 4–6 самых важных уточняющих вопросов, ответов на которые нет в брифе. Не спрашивай то, что уже указано. Вопросы должны влиять на драматургию ролика и на сохранение единого образа героя. К каждому вопросу дай короткое пояснение, зачем это режиссёру, и 3–4 варианта ответа, в которых видно режиссёрское мышление: конкретные, образные, разные по характеру.
+
+ФОРМАТ: ответь только JSON-массивом, без текста до и после:
+[{"q":"вопрос","why":"зачем это режиссёру","options":["вариант 1","вариант 2","вариант 3"]}]`;
+}
+function scriptPrompt(){
+  const [cnt,avg]=SHOTPLAN[state.dur]; const en=state.plang==="en";
+  return context()+answersText()+`
+ЗАДАЧА: продумай ролик целиком, от первого до последнего кадра. Придумай концепцию и драматургию, разложи ролик на кадры и напиши промпты.
+${state.depth==="max"?"Режим «Максимум»: продумай драматургию глубже, ищи неожиданные, но мотивированные решения, подтекст и визуальные рифмы между кадрами.\n":""}
+КАДРЫ: около ${cnt} кадров (средняя длина кадра ~${avg} с). Каждый кадр от 2 до 8 секунд. Сумма длительностей всех кадров ровно ${state.dur} секунд. Таймкоды в формате 0:00–0:03.
+
+РЕЖИССЁРСКИЕ ПРАВИЛА:
+- хук в первые 1–3 секунды — самый необычный кадр ролика;
+- ясная драматургия и эмоциональная дуга героя, пик эмоции совпадает с продуктом;
+- чередуй крупности и ракурсы, не ставь два одинаковых плана подряд;
+- соблюдай правила 180° и 30°;
+- 1–2 творческих нестандартных ракурса (отражение, сверху, сквозь предмет, POV), каждый мотивирован смыслом;
+- свет мотивирован и одинаково направлен во всех кадрах одной сцены;
+- финал: пэкшот или взгляд в камеру и свободное место под логотип и слоган.
+
+СОХРАНЕНИЕ ГЕРОЯ:
+- id_block: очень конкретный паспорт внешности на 50–80 слов: возраст, черты лица, кожа, глаза, брови, особые приметы (родинки, веснушки), волосы, телосложение, макияж. Без одежды. Без имени.
+- wardrobe: одежда и продукт, одинаковые во всех кадрах.
+- style_block: 40–70 слов: фотореализм${state.section==="cartoon"?" (для мультфильма — единый стиль рендера вместо фотореализма)":""}, камера и оптика, схема света, палитра, зерно, текстура кожи.
+- negative: «пластиковая» кожа, смена лица, другой человек, деформация рук и ткани, текст, водяные знаки, CGI-вид, мерцание и то, что важно для этого ролика.
+- В image_prompt, video_prompt и character_sheet_prompt НЕ описывай внешность и одежду героя. Ставь метку [CHARACTER] там, где в кадре герой. Паспорт, гардероб и стиль приложение подставит само дословно. Пиши только то, что уникально для кадра.
+
+ПРОМПТЫ КАДРА:
+- image_prompt: стартовый кадр, статичная композиция: крупность, ракурс, действие, эмоция, среда и свет кадра.
+- video_prompt: анимация: одно ясное действие, одно движение камеры, длительность. Физика ткани и волос, микро-мимика.
+- Учитывай особенности выбранных генераторов.
+- Поля id_block, wardrobe, style_block, negative, character_sheet_prompt, image_prompt, video_prompt пиши ${en?"на английском":"на русском"}. Все остальные поля (действие, эмоция, «зачем», переход, звук, план, ракурс, движение, свет) — по-русски.
+- tips: 3–5 практических советов по сохранению героя и стиля именно для этого ролика (лист персонажа, стартовое изображение, затем анимация, один seed, проверка направления света).
+
+ФОРМАТ: ответь только JSON-объектом, без текста до и после:
+{"title":"название ролика","logline":"о чём ролик в одной фразе","concept":"режиссёрская идея, 2–3 предложения",
+"structure":[{"act":"Хук","time":"0–3 с","goal":"задача акта"}],
+"character":{"name":"имя героя","id_block":"...","wardrobe":"...","emotion_arc":"эмоция → эмоция → ..."},
+"style":{"look":"стиль одной фразой по-русски","style_block":"...","negative":"..."},
+"character_sheet_prompt":"лист персонажа с [CHARACTER]: анфас, 3/4, профили, нейтральный фон",
+"shots":[{"n":1,"time":"0:00–0:03","dur":3,"act":"Хук","size":"Деталь / макро","angle":"ракурс","move":"движение камеры","lens":"100mm macro","light":"свет","action":"что происходит","emotion":"эмоция","why":"зачем кадр в драматургии","transition":"переход к следующему","image_prompt":"... [CHARACTER] ...","video_prompt":"... [CHARACTER] ...","sound":"звук, музыка, голос"}],
+"tips":["совет 1","совет 2"]}
+Акты структуры: ${ACTS.join(", ")}.`;
+}
+function redoPrompt(shot,wish){
+  const r=state.result; const en=state.plang==="en";
+  const brief=r.shots.map(s=>`${s.n}. ${s.time} ${s.act} · ${s.size} · ${s.angle} · ${s.action}`).join("\n");
+  return `${ROLE}
+
+РАЗДЕЛ: ${secName()}. ${SECTIONS[state.section].logic}
+${rules.trim()?"ПРАВИЛА СТУДИИ (обязательны):\n"+rules.trim()+"\n":""}
+РОЛИК «${r.title}», ${state.dur} с, формат ${state.ar}. Концепция: ${r.concept}
+Герой: ${r.character?.name}. Дуга: ${r.character?.emotion_arc}. Стиль: ${r.style?.look}
+
+ВСЯ РАСКАДРОВКА (кратко):
+${brief}
+
+ТЕКУЩИЙ КАДР (JSON):
+${JSON.stringify(shot)}
+
+ПОЖЕЛАНИЕ: ${wish||"сделай кадр сильнее и выразительнее с режиссёрской точки зрения"}
+
+ЗАДАЧА: перепиши только этот кадр. Сохрани номер, таймкод, длительность, акт и монтажную логику с соседними кадрами (правила 180° и 30°, не повторяй крупность соседей). В image_prompt и video_prompt не описывай внешность и одежду героя, ставь метку [CHARACTER]. Промпты ${en?"на английском":"на русском"}, остальные поля по-русски.
+ФОРМАТ: ответь только JSON-объектом кадра с теми же полями: n, time, dur, act, size, angle, move, lens, light, action, emotion, why, transition, image_prompt, video_prompt, sound.`;
+}
+const ERR = {
+  not_granted:"Нет доступа к Claude. Разрешите приложению генерацию в окне разрешения и попробуйте снова.",
+  rate_limited:"Лимит запросов исчерпан. Подождите минуту и повторите.",
+  invalid_json:"Ответ пришёл не полностью. Попробуйте ещё раз или выберите «Стандарт» и более короткий ролик.",
+  prompt_too_large:"Бриф слишком длинный. Сократите поля брифа или правила студии.",
+  session_expired:"Сессия истекла. Обновите страницу и войдите снова.",
+  refused:"Модель отказалась выполнять запрос. Переформулируйте бриф спокойнее, без откровенных деталей.",
+  empty_completion:"Claude вернул пустой ответ. Попробуйте ещё раз.",
+  upstream_error:"Claude сейчас не отвечает. Попробуйте ещё раз через минуту.",
+  sampling_disabled:"Генерация отключена в этом окне.", capability_disabled:"Генерация отключена в этом окне.", capability_removed:"Генерация недоступна в этом окне.",
+  not_declared:"Генерация недоступна в этом окне.", queue_overflow:"Слишком много запросов сразу. Подождите и повторите."
+};
+const errText = e=>ERR[e?.code]||("Не получилось: "+(e?.message||"неизвестная ошибка")+". Попробуйте ещё раз.");
+
+async function runJob(kind,label,prompt,opts={}){
+  if(!sampleFn){lastError="Генерация работает, когда приложение открыто в Claude. Пример и шпаргалка доступны всегда.";render();return null}
+  if(job) return null;
+  const ctl=new AbortController();
+  job={kind,label,ctl,chars:0,start:Date.now(),shot:opts.shot};lastError="";render();
+  const tick=setInterval(updateJob,1000);
+  try{
+    const data=await sampleFn.json(prompt,{signal:ctl.signal,cache:false,modelTier:opts.tier||"default",onText:({text})=>{if(job){job.chars=text.length;updateJob()}}});
+    return data;
+  }catch(e){
+    if(e?.code!=="cancelled") lastError=errText(e); else toast("Генерация остановлена");
+    return null;
+  }finally{clearInterval(tick);job=null;render()}
+}
+function updateJob(){
+  const el=$("#jobInfo"); if(!el||!job) return;
+  const sec=Math.round((Date.now()-job.start)/1000);
+  el.textContent = job.chars? `Написано ${job.chars.toLocaleString("ru-RU")} знаков · ${sec} с` : `Режиссёр думает… ${sec} с`;
+}
+
+async function askQuestions(){
+  const data=await runJob("questions","Режиссёр готовит вопросы",questionsPrompt());
+  if(!data) return;
+  if(!Array.isArray(data)||!data.length){lastError=ERR.invalid_json;render();return}
+  state.questions=data.filter(q=>q&&q.q).slice(0,6).map(q=>({q:String(q.q),why:String(q.why||""),options:(q.options||[]).map(String).slice(0,4)}));
+  state.answers={}; state.step=3; state.isExample=false; save(); render();
+}
+function normalize(r){
+  if(!r||!Array.isArray(r.shots)||!r.shots.length) throw 0;
+  let t=0;
+  r.shots.forEach((s,i)=>{s.n=i+1;s.dur=Math.max(1,Math.round(Number(s.dur)||0));s.time=fmtT(t)+"–"+fmtT(t+s.dur);t+=s.dur});
+  r.character=r.character||{}; r.style=r.style||{}; r.structure=r.structure||[]; r.tips=r.tips||[];
+  return r;
+}
+async function buildScript(){
+  const data=await runJob("script","Режиссёр пишет сценарий и промпты",scriptPrompt(),{tier:state.depth==="max"?"complex":"default"});
+  if(!data) return;
+  try{state.result=normalize(data)}catch{lastError=ERR.invalid_json;render();return}
+  state.isExample=false; state.step=4; save(); render(); window.scrollTo({top:0});
+}
+async function redoShot(i){
+  const shot=state.result.shots[i]; const wish=(redoWish[i]||"").trim();
+  const data=await runJob("shot",`Переснимаю кадр ${shot.n}`,redoPrompt(shot,wish),{shot:i});
+  if(!data||typeof data!=="object"||!data.image_prompt){if(data) {lastError=ERR.invalid_json;render()} return}
+  state.result.shots[i]={...shot,...data,n:shot.n,time:shot.time,dur:shot.dur,act:shot.act};
+  redoWish[i]=""; state.isExample=false; save(); render();
+  requestAnimationFrame(()=>flashShot(i));
+  toast(`Кадр ${shot.n} переснят`);
+}
+async function downloadMd(){
+  const md=toMarkdown(); const name=(state.result.title||"scenario").replace(/[\\/:*?"<>|]+/g,"").slice(0,80)+".md";
+  if(downloadsNs){
+    try{await downloadsNs.save({filename:name,data:md});return}
+    catch(e){if(e?.code==="declined")return}
+  }
+  copy(md,"Сценарий (скачивание здесь недоступно)");
+}
+
+/* ---------- схема крупности ---------- */
+function sizeKey(s){
+  s=String(s||"").toLowerCase();
+  if(/сверхкруп|extreme close|ecu/.test(s)) return "xcu";
+  if(/детал|макро|macro|insert|detail/.test(s)) return "detail";
+  if(/средне-круп|средний круп|medium close|mcu/.test(s)) return "mcu";
+  if(/круп|close/.test(s)) return "cu";
+  if(/средне-общ|medium long|cowboy/.test(s)) return "mls";
+  if(/средн|medium/.test(s)) return "ms";
+  if(/дальн|extreme long|extreme wide|establish/.test(s)) return "els";
+  if(/общ|long|wide|full/.test(s)) return "ls";
+  return "ms";
+}
+const WIN={els:[-110,280],ls:[-8,116],mls:[-6,82],ms:[-5,56],mcu:[-3,36],cu:[-1.5,24],xcu:[3.2,8.5]};
+function arNum(){const [a,b]=state.ar.split(":").map(Number);return a/b}
+function frameSVG(size){
+  const k=sizeKey(size), ar=arNum();
+  if(k==="detail"){
+    const w=100*ar;
+    let waves="";for(let i=0;i<9;i++){const y=12+i*10;waves+=`<path d="M0 ${y} Q ${w/4} ${y-7} ${w/2} ${y} T ${w} ${y}" fill="none" stroke="currentColor" stroke-width="1.3" opacity="${.35+i%3*.2}"/>`}
+    return `<svg viewBox="0 0 ${w} 100" preserveAspectRatio="xMidYMid slice" aria-hidden="true">${waves}<circle cx="${w/2}" cy="50" r="20" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="4 3"/></svg>`;
+  }
+  const [y,h]=WIN[k], w=h*ar;
+  return `<svg viewBox="${50-w/2} ${y} ${w} ${h}" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <line x1="-500" y1="100" x2="600" y2="100" stroke="currentColor" stroke-width="${h/150}" opacity=".4"/>
+    <g fill="currentColor"><ellipse cx="50" cy="8" rx="5.6" ry="7.2"/><rect x="47.8" y="13" width="4.4" height="4"/>
+    <path d="M43 16 L57 16 Q63 17.5 63.5 23 L61 44 L62 53 L58.5 100 L52.5 100 L50 60 L47.5 100 L41.5 100 L38 53 L39 44 L36.5 23 Q37 17.5 43 16Z"/>
+    <path d="M37.5 19 L33 44 L35.5 45 L40 24Z M62.5 19 L67 44 L64.5 45 L60 24Z"/></g>
+    <g fill="var(--bg)"><ellipse cx="47.6" cy="7.3" rx="1.1" ry=".55"/><ellipse cx="52.4" cy="7.3" rx="1.1" ry=".55"/></g>
+  </svg>`;
+}
+
+/* ---------- рендер ---------- */
+function chipGroup(key,items,cls=""){
+  return `<div class="chips" role="group">${items.map(([v,l])=>`<button type="button" class="chip ${cls}" data-set="${key}" data-val="${esc(v)}" aria-pressed="${String(state[key])===String(v)}">${esc(l)}</button>`).join("")}</div>`;
+}
+function jobBar(){
+  if(!job) return lastError?`<div class="note err" role="alert" style="margin-bottom:16px">${esc(lastError)}</div>`:"";
+  return `<div class="job" role="status"><svg class="reel" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="11" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="13" cy="13" r="2" fill="currentColor"/><circle cx="13" cy="6.5" r="2.6" fill="currentColor"/><circle cx="13" cy="19.5" r="2.6" fill="currentColor"/><circle cx="6.5" cy="13" r="2.6" fill="currentColor"/><circle cx="19.5" cy="13" r="2.6" fill="currentColor"/></svg>
+    <div class="txt"><b>${esc(job.label)}</b><span class="muted mono" id="jobInfo">Режиссёр думает…</span></div>
+    <button class="btn small" data-act="stop">Стоп</button></div>`;
+}
+function stepper(){
+  const names=["Формат","Бриф","Уточнения","Раскадровка"];
+  return `<ol class="steps">${names.map((n,i)=>{const s=i+1;return `<li><button data-step="${s}" ${state.step===s?'aria-current="step"':""} class="${state.step>s?"done":""}"><span class="num">${s}</span><span class="t">${n}</span></button></li>`}).join("")}</ol>`;
+}
+function step1(){
+  return `<section class="panel stack">
+    <div class="head"><span class="label">Шаг 1 · Формат</span><h2>Что снимаем?</h2><p class="muted">Раздел задаёт режиссёрскую логику ролика.</p></div>
+    <div class="cards">${Object.entries(SECTIONS).map(([k,s])=>`<button type="button" class="scard" data-set="section" data-val="${k}" aria-pressed="${state.section===k}"><svg class="ic" viewBox="0 0 38 38" aria-hidden="true">${s.icon}</svg><b>${s.name}</b><span>${s.desc}</span></button>`).join("")}</div>
+    <p class="note">${esc(SECTIONS[state.section].logic)}</p>
+    <div class="grid2">
+      <div class="field"><span class="lab">Генератор видео</span>${chipGroup("gen",VGEN)}</div>
+      <div class="field"><span class="lab">Генератор кадров</span>${chipGroup("imggen",IGEN)}</div>
+      <div class="field"><span class="lab">Язык промптов</span>${chipGroup("plang",[["en","Английский"],["ru","Русский"]])}<span class="hint">Английский точнее понимают генераторы. Пояснения всегда на русском.</span></div>
+      <div class="field"><span class="lab">Глубина режиссуры</span>${chipGroup("depth",[["standard","Стандарт"],["max","Максимум"]])}<span class="hint">«Максимум» глубже продумывает драматургию, но пишет дольше.</span></div>
+    </div>
+    <div class="actions"><button class="btn primary" data-step="2">Дальше: бриф →</button></div>
+  </section>`;
+}
+function step2(){
+  const b=state.brief;
+  const fields=BRIEF_FIELDS.map(([k,l,ph,big])=>`<div class="field"${big?' style="grid-column:1/-1"':""}><label for="b-${k}">${l}</label>${big?`<textarea id="b-${k}" data-brief="${k}" placeholder="${esc(ph)}" rows="2">${esc(b[k])}</textarea>`:`<input type="text" id="b-${k}" data-brief="${k}" placeholder="${esc(ph)}" value="${esc(b[k])}">`}</div>`).join("");
+  return `<section class="panel stack">
+    <div class="head"><span class="label">Шаг 2 · Бриф</span><h2>Бриф на ролик</h2><p class="muted">Пустые поля режиссёр решит сам. Чем точнее герой, тем стабильнее лицо во всех кадрах.</p></div>
+    <div class="grid2">
+      <div class="field"><span class="lab">Длительность</span>${chipGroup("dur",DURS.map(d=>[d,d+" с"]),"mono")}<span class="hint mono">≈ ${SHOTPLAN[state.dur][0]} кадров по ~${SHOTPLAN[state.dur][1]} с</span></div>
+      <div class="field"><span class="lab">Формат кадра</span>${chipGroup("ar",ARS.map(a=>[a,a]),"mono")}</div>
+    </div>
+    <div class="grid2">${fields}</div>
+    <div class="rules field">
+      <label for="rules">Правила студии</label>
+      <span class="hint">Ваши приёмы или методики с курсов. Сохраняются между проектами, режиссёр обязан их соблюдать.</span>
+      <textarea id="rules" data-rules rows="3" placeholder="Например: героиня никогда не смотрит в камеру до финала; каждый кадр начинается с движения; в каждом ролике есть кадр через стекло.">${esc(rules)}</textarea>
+    </div>
+    <div class="actions"><button class="btn" data-step="1">← Формат</button><span class="sp"></span>
+      <button class="btn" data-act="direct" ${job?"disabled":""}>Сразу к раскадровке</button>
+      <button class="btn primary" data-act="ask" ${job?"disabled":""}>Режиссёр, задай вопросы</button></div>
+  </section>`;
+}
+function step3(){
+  const qs=state.questions;
+  const body = qs.length? qs.map((q,i)=>`<div class="q"><span class="qn">Вопрос ${i+1} из ${qs.length}</span><h4>${esc(q.q)}</h4>${q.why?`<p class="why">${esc(q.why)}</p>`:""}
+      <div class="opts">${q.options.map(o=>`<button type="button" class="opt" data-ans="${i}" data-val="${esc(o)}" aria-pressed="${state.answers[i]===o}">${esc(o)}</button>`).join("")}</div>
+      <input type="text" id="ans-${i}" data-ansinput="${i}" placeholder="Свой вариант или оставьте пустым — режиссёр решит сам" value="${esc(q.options.includes(state.answers[i])?"":state.answers[i]||"")}">
+    </div>`).join("")
+    : `<div class="empty"><p class="muted">Вопросов пока нет. Режиссёр задаст 4–6 вопросов, которых нет в брифе.</p><button class="btn primary" data-act="ask" ${job?"disabled":""}>Режиссёр, задай вопросы</button></div>`;
+  return `<section class="panel stack">
+    <div class="head"><span class="label">Шаг 3 · Уточнения</span><h2>Вопросы режиссёра</h2><p class="muted">Выберите вариант, напишите свой или пропустите.</p></div>
+    ${body}
+    <div class="actions"><button class="btn" data-step="2">← Бриф</button>${qs.length?`<button class="btn" data-act="ask" ${job?"disabled":""}>Другие вопросы</button>`:""}<span class="sp"></span>
+      <button class="btn primary" data-act="build" ${job?"disabled":""}>Собрать сценарий и промпты</button></div>
+  </section>`;
+}
+function copyBtn(id,label="Копировать"){return `<button class="btn small" data-copy="${id}">${label}</button>`}
+function step4(){
+  const r=state.result;
+  if(!r) return `<section class="panel"><div class="empty"><h3>Раскадровки пока нет</h3><p class="muted">Заполните бриф и соберите сценарий.</p><button class="btn primary" data-step="2">К брифу</button></div></section>`;
+  const total=r.shots.reduce((a,s)=>a+s.dur,0);
+  const actIdx=a=>{const i=ACTS.findIndex(x=>String(a||"").toLowerCase().startsWith(x.toLowerCase().slice(0,5)));return i<0?2:i};
+  const actColor=a=>`color-mix(in srgb,var(--accent) ${[70,22,38,55,30][actIdx(a)]}%,var(--surface))`;
+  const tl=r.shots.map((s,i)=>`<button style="flex:${s.dur};background:${actColor(s.act)}" data-goto="${i}" title="Кадр ${s.n}: ${esc(s.size)}, ${s.dur} с" aria-label="Кадр ${s.n}, ${s.dur} секунд"><b>${s.n}</b><span>${s.dur}с</span></button>`).join("");
+  const ticks=[0,.25,.5,.75,1].map(f=>`<span>${fmtT(Math.round(total*f))}</span>`).join("");
+  const shots=r.shots.map((s,i)=>`<article class="shot" id="shot-${i}">
+    <aside>
+      <div><div class="no">${String(s.n).padStart(2,"0")}</div><div class="tc">${esc(s.time)}</div><div class="tc muted">${s.dur} с</div></div>
+      <div class="frame" style="aspect-ratio:${state.ar.replace(":","/")};${arNum()>1.9?"height:auto;width:100%":""}" title="${esc(s.size)}">${frameSVG(s.size)}</div>
+      <div class="meta"><div><span>План</span>${esc(s.size)}</div><div><span>Ракурс</span>${esc(s.angle)}</div><div><span>Камера</span>${esc(s.move)}</div><div><span>Оптика</span><b class="mono">${esc(s.lens)}</b></div><div><span>Свет</span>${esc(s.light)}</div></div>
+    </aside>
+    <div class="body">
+      <div class="row"><span class="pill">${esc(s.act)}</span></div>
+      <p class="action">${esc(s.action)}</p>
+      <div class="whybox"><span class="label">Зачем этот кадр</span><p>${esc(s.why)}</p></div>
+      <div class="facts"><div><span>Эмоция</span>${esc(s.emotion)}</div><div><span>Переход</span>${esc(s.transition)}</div><div><span>Звук</span>${esc(s.sound)}</div></div>
+      <div class="prompt"><div class="ph"><span class="label">Стартовый кадр · image</span>${copyBtn("img-"+i)}</div><div class="code" id="img-${i}">${esc(assemble(s.image_prompt,"image"))}</div></div>
+      <div class="prompt"><div class="ph"><span class="label">Анимация · video</span>${copyBtn("vid-"+i)}</div><div class="code" id="vid-${i}">${esc(assemble(s.video_prompt,"video"))}</div></div>
+      <div class="redo"><input type="text" id="redo-${i}" data-redo="${i}" placeholder="Пожелание: например, «сделай ракурс смелее»" value="${esc(redoWish[i]||"")}" aria-label="Пожелание к кадру ${s.n}">
+        <button class="btn small" data-act="redo" data-i="${i}" ${job?"disabled":""}>${job?.kind==="shot"&&job.shot===i?"Переснимаю…":"Переснять кадр"}</button></div>
+    </div>
+  </article>`).join("");
+  const sumWarn = total!==Number(state.dur)?`<p class="note">Сумма кадров ${total} с, а ролик ${state.dur} с. Можно пересобрать сценарий или подрезать кадры при монтаже.</p>`:"";
+  return `<div class="stack">
+    ${state.isExample?`<div class="note ex"><b>Это пример проекта.</b> Так выглядит результат для вымышленного бренда Maison Lune. Нажмите «Новый проект», чтобы собрать свой ролик.</div>`:""}
+    <section class="panel stack">
+      <div class="hero-r"><span class="label">${esc(secName())} · <span class="mono">${state.dur} с · ${esc(state.ar)} · ${r.shots.length} кадров</span></span><h2>${esc(r.title)}</h2><p class="logline">${esc(r.logline)}</p><p class="concept">${esc(r.concept)}</p></div>
+      <div class="arc">${r.structure.map(a=>`<div><span class="mono">${esc(a.time)}</span><b>${esc(a.act)}</b><p>${esc(a.goal)}</p></div>`).join("")}</div>
+      <div class="actions" style="justify-content:flex-start">
+        <button class="btn primary" data-act="copyall">Копировать все промпты</button>
+        <button class="btn" data-act="md">Скачать сценарий (.md)</button>
+        <span class="sp"></span><button class="btn" data-act="new">Новый проект</button>
+      </div>
+    </section>
+    <section class="stack"><div class="head"><span class="label">Библия проекта</span><h3>Одно лицо, один свет, один стиль</h3></div>
+      <div class="bible">
+        <div class="bcard"><div class="bh"><b>Паспорт героя${r.character?.name?": "+esc(r.character.name):""}</b>${copyBtn("bb-id")}</div>
+          <div class="code" id="bb-id">${esc(r.character?.id_block)}</div>
+          <p class="kv"><b>Гардероб:</b> ${esc(r.character?.wardrobe)}</p><p class="kv"><b>Дуга:</b> ${esc(r.character?.emotion_arc)}</p></div>
+        <div class="bcard"><div class="bh"><b>Визуальный стиль</b>${copyBtn("bb-st")}</div><p class="kv">${esc(r.style?.look)}</p>
+          <div class="code" id="bb-st">${esc(r.style?.style_block)}\n\nNegative: ${esc(r.style?.negative)}</div></div>
+        <div class="bcard"><div class="bh"><b>Шаг 0: лист персонажа</b>${copyBtn("bb-sh")}</div><p class="kv muted">Сгенерируйте первым и используйте как референс лица во всех кадрах.</p>
+          <div class="code" id="bb-sh">${esc(assemble(r.character_sheet_prompt,"sheet"))}</div></div>
+      </div>
+    </section>
+    <section class="panel stack"><div class="row" style="justify-content:space-between"><h3>Монтажная линейка</h3><div class="legend">${ACTS.map(a=>`<span><i style="background:${actColor(a)}"></i>${a}</span>`).join("")}</div></div>
+      <div><div class="timeline">${tl}</div><div class="tl-scale">${ticks}</div></div>${sumWarn}</section>
+    <section class="stack">${shots}</section>
+    ${r.tips.length?`<section class="panel stack"><h3>Как сохранить героя в этом ролике</h3><ol class="tips">${r.tips.map(t=>`<li>${esc(t)}</li>`).join("")}</ol></section>`:""}
+  </div>`;
+}
+const CHEAT=[
+  ["Крупность планов",[["Дальний план","extreme long shot","Человек мал в пространстве: масштаб, одиночество, мир бренда."],["Общий план","long shot / full shot","Фигура целиком: пространство и посадка одежды."],["Средне-общий","medium long shot","До колен: поза и жест."],["Средний","medium shot","До пояса: действие и взаимодействие."],["Средне-крупный","medium close-up","До груди: эмоция плюс контекст."],["Крупный","close-up","Лицо: главная эмоция, связь со зрителем."],["Сверхкрупный","extreme close-up","Глаза, губы: пик напряжения."],["Деталь / макро","macro detail shot","Фактура продукта, швы, кружево."]]],
+  ["Ракурсы",[["Уровень глаз","eye level","Нейтрально и честно."],["Нижний","low angle","Сила, уверенность, статус."],["Верхний","high angle","Нежность, уязвимость."],["Сверху вниз","top-down / bird's-eye view","Графика и композиция."],["Голландский угол","dutch angle","Тревога, нестабильность."],["Через плечо","over-the-shoulder shot","Диалог, точка зрения."],["Через отражение","mirror reflection shot","Второй план, взгляд на себя."],["Субъективная камера","POV shot","Зритель на месте героя."]]],
+  ["Движение камеры",[["Наезд","slow push-in / dolly in","Усиливает эмоцию, приближает к мысли героя."],["Отъезд","pull-back / dolly out","Раскрывает контекст, хорошо для финала."],["Панорама","pan","Обзор, связь двух точек."],["Проезд вбок","lateral tracking shot","Сопровождение, параллакс."],["Кран","crane up / crane down","Масштаб, торжественность."],["Облёт","orbit / arc shot","Объём, кульминация."],["Стедикам","steadicam follow shot","Плавное следование за героем."],["Статика","locked-off static shot","Спокойствие, внимание к действию."]]],
+  ["Свет",[["Рисующий","key light","Основной свет, лепит форму лица."],["Заполняющий","fill light","Смягчает тени."],["Контровой","backlight / rim light","Отделяет от фона, ореол на волосах."],["Рембрандт","Rembrandt lighting","Треугольник света на щеке, драма."],["Бабочка","butterfly lighting","Бьюти и гламур."],["Золотой час","golden hour light","Тёплый низкий свет, романтика."],["Практические источники","practical lights","Лампы в кадре мотивируют свет."],["Low-key / High-key","low-key / high-key lighting","Контрастная драма или светлая лёгкость."]]],
+  ["Монтажная грамматика",[["Правило 180°","180-degree rule","Камера остаётся по одну сторону линии взаимодействия."],["Правило 30°","30-degree rule","При склейке меняйте угол минимум на 30° или крупность."],["Чередование крупностей","shot size variation","Не ставьте два одинаковых плана подряд."],["Монтаж по движению","cut on action","Склейка в середине движения скрывает шов."],["Рифма кадра","match cut","Похожая форма или движение связывает сцены."],["Перебивка","cutaway / insert","Деталь дарит ритм и время."]]],
+  ["Драматургия рекламы",[["Хук, 0–3 с","hook","Самый необычный кадр ролика."],["Завязка","setup","Героиня и её мир."],["Развитие","development","Рост эмоции."],["Кульминация","climax","Пик эмоции совпадает с продуктом."],["Пэкшот / CTA","packshot / call to action","Продукт, логотип, призыв."],["Сохранение героя","character consistency","Паспорт героя, лист персонажа, один seed."]]]
+];
+function cheat(){
+  return `<div class="stack"><div class="head"><span class="label">Справочник</span><h2>Шпаргалка режиссёра</h2><p class="muted">Нажмите английский термин, чтобы скопировать его в промпт.</p></div>
+  <div class="cheat">${CHEAT.map(([t,items])=>`<section class="cgroup"><h3>${t}</h3><dl>${items.map(([ru,en,n])=>`<div class="it"><dt>${ru}</dt><button class="en" data-term="${esc(en)}">${esc(en)}</button><dd>${n}</dd></div>`).join("")}</dl></section>`).join("")}</div></div>`;
+}
+function render(){
+  document.querySelectorAll(".tabs button").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===state.tab)));
+  const app=$("#app");
+  if(state.tab==="cheat"){app.innerHTML=cheat();return}
+  const noGen = runtimeChecked && !sampleFn ? `<p class="note" style="margin-bottom:16px">Генерация работает, когда приложение открыто в Claude. Пример проекта и шпаргалка доступны всегда.</p>`:"";
+  app.innerHTML = stepper()+jobBar()+(state.step===1||state.step===2?"":"")+( [0,step1,step2,step3,step4][state.step]() )+(state.step<4?noGen:"");
+  updateJob();
+}
+function flashShot(i){const el=$("#shot-"+i);if(!el)return;el.scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth",block:"start"});el.classList.add("flash");setTimeout(()=>el.classList.remove("flash"),1400)}
+
+/* ---------- события ---------- */
+document.addEventListener("click",e=>{
+  const t=e.target.closest("button"); if(!t) return;
+  const d=t.dataset;
+  if(d.tab){state.tab=d.tab;save();render();return}
+  if(d.step){state.step=Number(d.step);save();render();window.scrollTo({top:0});return}
+  if(d.set){state[d.set]=["dur"].includes(d.set)?Number(d.val):d.val;save();render();return}
+  if(d.ans!==undefined){const i=Number(d.ans);state.answers[i]=state.answers[i]===d.val?"":d.val;save();render();return}
+  if(d.goto!==undefined){flashShot(Number(d.goto));return}
+  if(d.copy){const el=document.getElementById(d.copy);if(el)copy(el.textContent,"Промпт");return}
+  if(d.term){copy(d.term,"Термин");return}
+  switch(d.act){
+    case "stop": job?.ctl.abort(); break;
+    case "ask": askQuestions(); break;
+    case "direct": state.questions=[];state.answers={};buildScript(); break;
+    case "build": buildScript(); break;
+    case "redo": redoShot(Number(d.i)); break;
+    case "copyall": copy(allPrompts(),"Все промпты"); break;
+    case "md": downloadMd(); break;
+    case "new": {const keep={gen:state.gen,imggen:state.imggen,plang:state.plang,depth:state.depth};state=Object.assign(blankState(),keep);lastError="";save();render();window.scrollTo({top:0});break}
+  }
+});
+document.addEventListener("input",e=>{
+  const t=e.target, d=t.dataset;
+  if(d.brief){state.brief[d.brief]=t.value;state.isExample=false;save()}
+  else if(d.rules!==undefined){rules=t.value;saveRules(rules)}
+  else if(d.ansinput!==undefined){state.answers[Number(d.ansinput)]=t.value;save();
+    t.closest(".q").querySelectorAll(".opt").forEach(o=>o.setAttribute("aria-pressed","false"))}
+  else if(d.redo!==undefined){redoWish[Number(d.redo)]=t.value}
+});
+document.addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.dataset?.redo!==undefined){e.preventDefault();redoShot(Number(e.target.dataset.redo))}});
+
+render();
+(async()=>{
+  const use=window.claude?.use;
+  if(use){
+    try{sampleFn=await window.claude.use("sample")}catch{}
+    try{downloadsNs=await window.claude.use("downloads")}catch{}
+  }
+  runtimeChecked=true; render();
+})();
+</script>
