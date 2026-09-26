@@ -198,7 +198,24 @@ textarea{resize:vertical;min-height:72px}
 @keyframes pulse{50%{opacity:.25}}
 .oset{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
 .oset .field{min-width:180px;flex:1}
-.gallery{display:flex;flex-direction:column;gap:8px}
+.bwrap{display:grid;grid-template-columns:minmax(0,1fr) 370px;gap:18px;align-items:start}
+.bside{position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px)}
+.bside .code{max-height:320px}
+@media (max-width:900px){.bwrap{grid-template-columns:1fr}.bside{position:static}}
+.bcat{display:flex;flex-direction:column;gap:12px;padding:20px}
+.bcat-h{display:flex;gap:12px;align-items:flex-start}
+.bnum{font-family:var(--mono);font-size:.82rem;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--accent);color:var(--accent);flex:none;margin-top:2px}
+.bcat .hint{font-size:.84rem;color:var(--ink-2);margin:0}
+.chip.rec{border-color:var(--accent);border-style:dashed;color:var(--accent);font-weight:600}
+.chip.rec[aria-pressed="true"]{color:var(--accent-ink);border-style:solid}
+.odetail{display:flex;gap:14px;align-items:flex-start;background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;flex-wrap:wrap}
+.odetail .frame{flex:none}
+.od-t{display:flex;flex-direction:column;gap:6px;flex:1;min-width:200px;font-size:.9rem}
+.en-t{font-size:.74rem;color:var(--accent)}
+.recwhy{color:var(--accent);font-size:.86rem;font-weight:600}
+.advice{border-color:var(--accent);background:linear-gradient(var(--accent-soft),var(--surface) 70%)}
+.mist{margin:6px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:.9rem}
+.linkbtn{background:none;border:0;padding:0;color:var(--accent);font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:.88rem;z-index:10;max-width:calc(100% - 32px)}
 .empty{text-align:center;padding:40px 16px;display:flex;flex-direction:column;gap:12px;align-items:center}
 </style>
@@ -207,11 +224,11 @@ textarea{resize:vertical;min-height:72px}
   <header class="top">
     <div class="brand">
       <svg class="logo" viewBox="0 0 40 40" aria-hidden="true"><rect x="5" y="16" width="30" height="19" rx="2" fill="none" stroke="currentColor" stroke-width="2.2"/><g transform="rotate(-14 5 16)"><rect x="5" y="8" width="30" height="7" rx="1.5" fill="currentColor"/><path d="M11 8l-4 7M18 8l-4 7M25 8l-4 7M32 8l-4 7" stroke="var(--surface)" stroke-width="2.2"/></g><path d="M10 22h20M10 28h12" stroke="currentColor" stroke-width="1.6" opacity=".5"/></svg>
-      <div><h1>AI-Режиссёр</h1><small>раскадровка и промпты с единым героем</small></div>
+      <div><h1>AI-Режиссёр</h1><small>подсказки режиссёра для AI-креаторов</small></div>
     </div>
     <div class="tabs" role="tablist">
-      <button role="tab" id="tab-project" data-tab="project">Проект</button>
-      <button role="tab" id="tab-studio" data-tab="studio">Студия Outsee</button>
+      <button role="tab" id="tab-builder" data-tab="builder">Конструктор кадра</button>
+      <button role="tab" id="tab-project" data-tab="project">Ролик по брифу</button>
       <button role="tab" id="tab-cheat" data-tab="cheat">Шпаргалка режиссёра</button>
     </div>
   </header>
@@ -314,7 +331,8 @@ const KEY="ai-director:project:v1", RKEY="ai-director:rules:v1";
 function load(){try{const s=JSON.parse(localStorage.getItem(KEY));return s&&s.brief?s:null}catch{return null}}
 function migrate(s){
   s.media=s.media||{}; s.oImg=s.oImg||"auto"; s.oVid=s.oVid||"auto"; s.oQ=s.oQ||"standard";
-  s.studio=Object.assign({req:"",kind:"image",aspect:"9:16",useHero:false,dur:5,res:null},s.studio||{});
+  s.builder=Object.assign({req:"",kind:"image",aspect:"9:16",dur:5,focus:null,mood:null,sel:{},advice:null,improved:null},s.builder||{});
+  delete s.studio; if(!s.tab||s.tab==="studio") s.tab="builder";
   return s;
 }
 let saveT;
@@ -322,7 +340,7 @@ function save(){clearTimeout(saveT);saveT=setTimeout(()=>{try{localStorage.setIt
 function loadRules(){try{return localStorage.getItem(RKEY)||""}catch{return ""}}
 function saveRules(v){try{localStorage.setItem(RKEY,v)}catch{}}
 
-let state = migrate(load() || exampleState());
+let state = migrate(load() || Object.assign(blankState(),{tab:"builder"}));
 let rules = loadRules();
 let job = null;          // {kind,label,ctl,chars,start,shot}
 let lastError = "";
@@ -557,13 +575,10 @@ function compact(o){for(const k in o) if(o[k]===undefined||o[k]===""||(Array.isA
 function argsFor(key,kind){
   const r=state.result, q=state.oQ;
   if(key==="sheet") return compact({prompt:assemble(r.character_sheet_prompt,"sheet",true),aspect_ratio:"16:9",model:imgModel(),quality:q,intent:"референс лица героя для серии кадров"});
-  if(key==="studio"){
-    const s=state.studio, res=s.res; const hero=s.useHero&&r;
-    if(kind==="image"){
-      const prompt = hero ? assemble(res.image_prompt,"image",true,s.aspect) : clean(res.image_prompt.replace(/\[CHARACTER\]/g,"the character"))+"."+(res.negative?`\nNegative: ${res.negative}`:"");
-      return compact({prompt,aspect_ratio:s.aspect,model:imgModel(),quality:q,reference_urls:hero&&sheetUrl()?[sheetUrl()]:undefined});
-    }
-    return compact({prompt:plainVideo(res.video_prompt),aspect_ratio:s.aspect,duration_seconds:s.dur,model:vidModel(),quality:q,first_frame_url:peek("studio","image").url});
+  if(key==="builder"){
+    const b=state.builder;
+    if(kind==="image") return compact({prompt:finalImage(),aspect_ratio:b.aspect,model:imgModel(),quality:q});
+    return compact({prompt:finalVideo(),aspect_ratio:b.aspect,duration_seconds:b.dur,model:vidModel(),quality:q,first_frame_url:peek("builder","image").url});
   }
   const i=Number(key.split("-")[1]), sh=r.shots[i];
   if(kind==="image") return compact({prompt:assemble(sh.image_prompt,"image",true,osAR(state.ar)),aspect_ratio:osAR(state.ar),model:imgModel(),quality:q,
@@ -672,55 +687,230 @@ function osSettings(){
   return `<div class="oset"><div class="field"><label for="oImg">Модель фото</label>${sel("oImg",OS_IMG)}</div><div class="field"><label for="oVid">Модель видео</label>${sel("oVid",OS_VID)}</div><div class="field"><label for="oQ">Качество</label>${sel("oQ",OS_Q)}</div></div>`;
 }
 
-/* ---------- студия: быстрый запрос ---------- */
-function studioPrompt(){
-  const s=state.studio, r=state.result, hero=s.useHero&&r;
+/* ---------- конструктор кадра ---------- */
+const B_CATS = [
+  {id:"focus",title:"Что главное в кадре?",q:"С этого начинается любой кадр: решите, куда зритель посмотрит первым.",hint:"От ответа зависят крупность, оптика и композиция — режиссёр подскажет их ниже.",opts:[
+    ["person","Человек и его эмоция","","Реклама с героем, портрет, lifestyle, бьюти."],
+    ["product","Продукт или деталь","","Украшения, косметика, ткань, еда, предметы."],
+    ["place","Место и атмосфера","","Интерьер, город, природа, мир бренда."],
+    ["action","Действие и движение","","Спорт, танец, человек что-то делает."]]},
+  {id:"mood",title:"Какое настроение?",q:"Эмоция, которую зритель должен почувствовать.",hint:"Настроение подсказывает ракурс, свет, цвет и движение камеры.",opts:[
+    ["tender","Нежность и спокойствие","","Утро, забота о себе, бельё, уход за кожей."],
+    ["power","Сила и уверенность","","Статус, лидерство, спорт, мужская и деловая мода."],
+    ["drama","Драма и напряжение","","Мини-кино, конфликт, вечерние образы."],
+    ["joy","Радость и энергия","","Молодёжные бренды, лето, праздник, соцсети."],
+    ["luxury","Роскошь","","Премиальные бренды, ювелирка, парфюм."],
+    ["mystery","Тайна","","Ночь, парфюм, интрига, тизеры."]]},
+  {id:"size",title:"Крупность",q:"Насколько близко камера к герою?",hint:"Правило: чем сильнее эмоция, тем крупнее план.",opts:[
+    ["els","Дальний план","extreme wide shot, the subject small in a vast space","Показать масштаб места, одиночество, мир бренда."],
+    ["ls","Общий план","full body wide shot","Фигура целиком: посадка одежды, поза, знакомство с местом."],
+    ["mls","Средне-общий","medium long shot framed from the knees up","Важны и поза, и лицо."],
+    ["ms","Средний план","medium shot from the waist up","Герой что-то делает руками или держит предмет."],
+    ["mcu","Средне-крупный","medium close-up from the chest up","Эмоция плюс немного одежды и контекста."],
+    ["cu","Крупный план","close-up portrait","Главное — эмоция лица. Самый сильный план для связи со зрителем."],
+    ["ecu","Сверхкрупный","extreme close-up","Пик эмоции: взгляд, губы, капля на коже."],
+    ["detail","Деталь / макро","macro detail shot","Продукт, фактура ткани, украшение, швы."]]},
+  {id:"angle",title:"Ракурс",q:"Откуда смотрит камера?",hint:"Ракурс задаёт отношение зрителя к герою. Не уверены — начните с уровня глаз.",opts:[
+    ["eye","Уровень глаз","eye-level angle","Нейтрально и честно, зритель на равных с героем."],
+    ["low","Нижний","low angle shot looking up","Герой выглядит сильным, уверенным, статусным."],
+    ["high","Верхний","high angle shot looking down","Нежность, лёгкость, уязвимость."],
+    ["top","Сверху вниз","top-down overhead shot","Графичная картинка: человек на кровати, раскладка продукта."],
+    ["dutch","Голландский угол","dutch angle, tilted frame","Тревога и динамика. Используйте редко."],
+    ["ots","Через плечо","over-the-shoulder shot","Взгляд другого человека, диалог, подглядывание."],
+    ["mirror","Через отражение","seen through a reflection in a mirror","Второй план, взгляд на себя."],
+    ["pov","От первого лица","first-person POV shot","Зритель на месте героя. Хорошо для UGC."]]},
+  {id:"lens",title:"Оптика",q:"Какой объектив?",hint:"Широкий объектив даёт больше пространства, длинный — мягкий фон и внимание к лицу.",opts:[
+    ["24","24 мм","shot on a 24mm wide-angle lens","Пространство, интерьер, динамика. Вблизи искажает лицо."],
+    ["35","35 мм","shot on a 35mm lens","Естественный взгляд человека, герой в своей среде."],
+    ["50","50 мм","shot on a 50mm lens","Как видит глаз. Универсальный выбор."],
+    ["85","85 мм","shot on an 85mm portrait lens, shallow depth of field","Портрет: мягкий размытый фон, красивое лицо."],
+    ["100","100 мм макро","shot on a 100mm macro lens","Деталь и фактура вплотную."]]},
+  {id:"light",title:"Свет",q:"Откуда свет и какой он?",hint:"Свет должен быть мотивирован: окно, солнце, лампа. Тогда кадр выглядит правдоподобно.",opts:[
+    ["window","Мягкий из окна","soft natural window light from the side","Нежно и естественно: утро, lifestyle."],
+    ["golden","Золотой час","warm golden hour sunlight","Романтика, тепло, свобода."],
+    ["rembrandt","Рембрандт","Rembrandt lighting with a triangle of light on the cheek","Драма, характер, глубина лица."],
+    ["butterfly","Бабочка","butterfly beauty lighting from above","Бьюти, косметика, гламурный портрет."],
+    ["rim","Контровой","strong backlight with a glowing rim light","Отделяет героя от фона, сияние, люкс."],
+    ["lowkey","Low-key","low-key lighting with deep shadows","Тайна, драма, вечер."],
+    ["highkey","High-key","bright high-key lighting with soft shadows","Лёгкость, чистота, свежесть."],
+    ["practical","Лампы в кадре","practical lights in the frame, lamps and neon","Ночь, город, атмосфера."]]},
+  {id:"comp",title:"Композиция",q:"Где герой в кадре?",hint:"Решите заранее, где будет место под текст или логотип.",opts:[
+    ["thirds","Правило третей","subject placed on the left third of the frame","Живо и естественно, с другой стороны остаётся место под текст."],
+    ["center","Центр и симметрия","centered symmetrical composition","Сила, статичность, пэкшот."],
+    ["negative","Много воздуха","minimalist composition with lots of negative space","Минимализм, люкс, место под логотип."],
+    ["frame","Рамка в рамке","framed through a doorway or window","Глубина, подглядывание, история."],
+    ["lines","Ведущие линии","leading lines guiding the eye to the subject","Взгляд идёт прямо к герою."],
+    ["foreground","Передний план","soft blurred foreground elements","Объём и ощущение присутствия."]]},
+  {id:"move",video:true,title:"Движение камеры",q:"Как движется камера?",hint:"Одно движение на клип: в сложных движениях генераторы путаются.",opts:[
+    ["static","Статика","locked-off static camera","Всё внимание на действии героя."],
+    ["pushin","Медленный наезд","slow push-in toward the subject","Усиливает эмоцию, приближает к мыслям героя."],
+    ["pullout","Отъезд","slow pull-back revealing the space","Раскрывает место. Хорош для финала."],
+    ["tracking","Проезд вбок","smooth lateral tracking shot","Сопровождает идущего героя, красивый параллакс."],
+    ["orbit","Облёт","slow orbit around the subject","Объём, кульминация, одежда со всех сторон."],
+    ["crane","Кран вверх","crane shot rising upward","Масштаб и торжественность."],
+    ["handheld","Ручная камера","subtle handheld camera movement","Живость, документальность, UGC."]]},
+  {id:"palette",title:"Цвет",q:"Какая палитра?",hint:"Два-три главных цвета делают кадр цельным.",opts:[
+    ["warm","Тёплая","warm palette of cream, beige and gold","Уют, утро, роскошь."],
+    ["cold","Холодная","cool palette of blue and steel grey","Технологии, свежесть, дистанция."],
+    ["pastel","Пастель","soft pastel palette","Нежность, бьюти, лёгкость."],
+    ["mono","Монохром","monochrome tonal palette","Минимализм, fashion."],
+    ["contrast","Яркая контрастная","bold saturated contrasting colors","Энергия, молодость, соцсети."],
+    ["bw","Чёрно-белая","black and white","Классика, драма, вне времени."]]},
+  {id:"style",title:"Стиль картинки",q:"На что похоже изображение?",hint:"Стиль лучше держать одинаковым во всех кадрах одного проекта.",opts:[
+    ["film","Плёнка","shot on 35mm film with fine grain","Живость, тепло, editorial."],
+    ["cinema","Кино","cinematic anamorphic look","Масштаб, история, драма."],
+    ["clean","Чистый цифровой","clean crisp commercial photography","Продукт, e-commerce."],
+    ["editorial","Журнальный","high-fashion editorial photography","Fashion, образ, поза."],
+    ["ugc","Как на телефон","casual smartphone photo, candid","UGC, соцсети, доверие."],
+    ["doc","Документальный","documentary candid style","Реальная жизнь, без позирования."]]}
+];
+const FOCUS_REC = {
+  person:{size:["cu","эмоция лучше всего читается на лице"],lens:["85","портретный объектив мягко размывает фон"],comp:["thirds","герой на трети оставляет воздух для взгляда"]},
+  product:{size:["detail","макро показывает качество и фактуру"],lens:["100","макрообъектив снимает вплотную"],comp:["negative","воздух вокруг продукта выглядит дорого"],angle:["eye","продукт без искажений"]},
+  place:{size:["els","дальний план показывает масштаб места"],lens:["24","широкий угол вмещает пространство"],comp:["lines","линии ведут взгляд вглубь"]},
+  action:{size:["ms","средний план показывает руки и действие"],lens:["35","естественная перспектива, как в жизни"],move:["tracking","камера сопровождает движение"],comp:["thirds","оставьте место по направлению движения"]}
+};
+const MOOD_REC = {
+  tender:{angle:["high","сверху герой выглядит мягче"],light:["window","мягкий свет из окна — самый нежный"],palette:["pastel","пастель поддерживает нежность"],move:["pushin","медленный наезд, как вдох"],style:["film","плёнка добавляет теплоты"]},
+  power:{angle:["low","снизу герой выглядит сильнее"],light:["rembrandt","светотень придаёт характер"],palette:["mono","сдержанный цвет — уверенность"],move:["orbit","облёт подчёркивает героя"],comp:["center","центр — это сила и статус"],style:["editorial","журнальная подача добавляет статуса"]},
+  drama:{angle:["dutch","наклон добавляет напряжения"],light:["lowkey","глубокие тени создают драму"],palette:["bw","чёрно-белое усиливает драму"],move:["pushin","наезд нагнетает"],style:["cinema","кинолук поддерживает историю"]},
+  joy:{angle:["eye","зритель на равных с героем"],light:["golden","тёплое солнце — это радость"],palette:["contrast","яркий цвет даёт энергию"],move:["handheld","живая камера"],style:["doc","живые моменты без позирования"]},
+  luxury:{angle:["eye","сдержанно и достойно"],light:["rim","контровой свет даёт сияние"],palette:["warm","кремовые тона выглядят роскошно"],comp:["negative","воздух в кадре — признак люкса"],move:["orbit","медленный облёт"],style:["editorial","журнальная эстетика"]},
+  mystery:{angle:["ots","через плечо — ощущение подглядывания"],light:["practical","лампы в кадре создают атмосферу"],palette:["cold","холодный цвет держит дистанцию"],comp:["frame","рамка в рамке добавляет тайны"],move:["static","статика держит напряжение"],style:["cinema","кинолук"]}
+};
+const B_NEG = "plastic skin, deformed hands, extra fingers, distorted face, text, watermark, logo, CGI look, flicker";
+const bcat = id=>B_CATS.find(c=>c.id===id);
+const bopt = (cid,oid)=>bcat(cid)?.opts.find(o=>o[0]===oid);
+const bcats = ()=>B_CATS.filter(c=>!c.video||state.builder.kind==="video");
+function brecs(){
+  const b=state.builder, out={};
+  const add=(m,src)=>{for(const k in m) out[k]={id:m[k][0],why:m[k][1],src}};
+  if(b.mood) add(MOOD_REC[b.mood]||{},"mood");
+  if(b.focus) add(FOCUS_REC[b.focus]||{},"focus");
+  if(b.advice?.recs) for(const k in b.advice.recs){const r=b.advice.recs[k]; if(bopt(k,r.id)) out[k]={id:r.id,why:r.why,src:"claude"}}
+  return out;
+}
+function builtImage(){
+  const b=state.builder, parts=[b.req.trim()||"[опишите сцену]"];
+  ["size","angle","lens","light","comp","palette","style"].forEach(c=>{const o=bopt(c,b.sel[c]);if(o)parts.push(o[2])});
+  parts.push("photorealistic, natural skin texture, high detail");
+  return parts.join(", ")+`.\nAspect ratio ${b.aspect}.\nNegative: ${B_NEG}`;
+}
+function builtVideo(){
+  const b=state.builder, m=bopt("move",b.sel.move);
+  return `${b.req.trim()||"[опишите действие]"}. Camera: ${m?m[2]:"locked-off static camera"}. One clear action, natural fabric and hair physics, subtle micro-expressions, ${b.dur} seconds.`;
+}
+const finalImage = ()=>state.builder.improved?.image_prompt ? state.builder.improved.image_prompt+(state.builder.improved.negative?`\nNegative: ${state.builder.improved.negative}`:"") : builtImage();
+const finalVideo = ()=>state.builder.improved?.video_prompt || builtVideo();
+function selText(){
+  const b=state.builder;
+  return bcats().filter(c=>b.sel[c.id]||b[c.id]).map(c=>{const o=bopt(c.id,b.sel[c.id]||b[c.id]);return `- ${c.title}: ${o[1]}${o[2]?" ("+o[2]+")":""}`}).join("\n")||"- ничего не выбрано, реши сам";
+}
+function catalogText(){
+  return B_CATS.filter(c=>!["focus","mood"].includes(c.id)&&(!c.video||state.builder.kind==="video")).map(c=>`${c.id}: `+c.opts.map(o=>`${o[0]}=${o[1]}`).join("; ")).join("\n");
+}
+function advicePrompt(){
+  const b=state.builder;
   return `${ROLE}
 
-Пользователь коротко описал, что хочет получить в ИИ-генераторе. Твоя задача — превратить это в детальный профессиональный промпт на английском.
-ЗАПРОС ПОЛЬЗОВАТЕЛЯ: ${s.req.trim()}
-ТИП: ${s.kind==="image"?"фото":"видео "+s.dur+" секунд (сначала генерируется стартовый кадр, затем он анимируется)"}. ФОРМАТ: ${s.aspect}.
-${rules.trim()?"ПРАВИЛА СТУДИИ (обязательны):\n"+rules.trim()+"\n":""}${hero?`ГЕРОЙ ПРОЕКТА уже описан отдельно, приложение подставит паспорт внешности, одежду и стиль само. Не описывай внешность и одежду героя, ставь метку [CHARACTER] там, где он в кадре. Стиль проекта: ${r.style?.look}.\n`:"Если в кадре человек, опиши его конкретно: возраст, черты лица, волосы, одежду, чтобы образ был однозначным. Метку [CHARACTER] не используй.\n"}
-image_prompt (80–160 слов): объект и действие, композиция, крупность, ракурс, объектив в мм, схема и направление света, палитра, фактуры и материалы, среда, настроение, фотореализм и натуральная текстура кожи. Добавь один точный режиссёрский ход, который делает кадр выразительнее.
-${s.kind==="video"?"video_prompt (40–90 слов): только движение, стартовый кадр уже задаёт картинку. Одно ясное действие, одно движение камеры, физика ткани и волос, микро-мимика. Если ролик длиннее 5 секунд, распиши по секундам.\n":"video_prompt: пустая строка.\n"}negative: что исключить (пластиковая кожа, деформация рук, текст, водяные знаки, CGI-вид и то, что важно для этого кадра).
+AI-креатор хочет сгенерировать ${b.kind==="image"?"фото":"видео "+b.dur+" секунд"} в формате ${b.aspect}. Его идея своими словами:
+«${b.req.trim()}»
+Уже выбрано:
+${selText()}
+${rules.trim()?"ПРАВИЛА СТУДИИ (обязательны):\n"+rules.trim()+"\n":""}
+Ты его наставник. Подскажи, как снять именно эту идею, и объясни просто, без жаргона.
+Для каждой категории выбери ОДИН вариант строго из списка id и объясни выбор одной короткой фразой, привязанной к его идее:
+${catalogText()}
+
 ФОРМАТ: ответь только JSON-объектом:
-{"title":"короткое название по-русски","image_prompt":"...","video_prompt":"...","negative":"...","notes":"1–2 предложения по-русски: какие режиссёрские решения ты принял"}`;
+{"start":"с чего начать именно с этой идеей, 2–3 предложения","idea":"режиссёрский ход, который сделает кадр сильнее, 1–2 предложения","recs":{"size":{"id":"cu","why":"почему"},"angle":{"id":"...","why":"..."}},"mistakes":["частая ошибка с такой идеей и как её избежать","..."]}
+В recs включи категории: ${catalogText().split("\n").map(l=>l.split(":")[0]).join(", ")}. mistakes — 2–3 пункта.`;
 }
-async function studioWrite(){
-  if(!state.studio.req.trim()){toast("Опишите, что нужно снять");return}
-  const data=await runJob("studio","Режиссёр пишет подробный промпт",studioPrompt());
+function improvePrompt(){
+  const b=state.builder;
+  return `${ROLE}
+
+Собери профессиональный промпт на английском для ИИ-генератора ${b.kind==="image"?"изображений":"видео (сначала стартовый кадр, затем его анимация)"}.
+ИДЕЯ АВТОРА (сохрани её смысл, ничего не подменяй): «${b.req.trim()}»
+ВЫБОР АВТОРА (используй точно):
+${selText()}
+Формат ${b.aspect}.${b.kind==="video"?" Длительность "+b.dur+" с.":""}
+${rules.trim()?"ПРАВИЛА СТУДИИ (обязательны):\n"+rules.trim()+"\n":""}
+image_prompt: 80–150 слов. Начни с главного объекта и действия, затем крупность, ракурс, объектив, свет с направлением, композиция, палитра, фактуры, среда, стиль. Если в кадре человек, опиши его конкретно: возраст, черты, волосы, одежда. Фотореализм, натуральная текстура кожи.
+${b.kind==="video"?"video_prompt: 40–90 слов, только движение: одно действие, одно движение камеры, физика ткани и волос, микро-мимика; при длине больше 5 с распиши по секундам.":"video_prompt: пустая строка."}
+negative: что исключить.
+ФОРМАТ: только JSON: {"image_prompt":"...","video_prompt":"...","negative":"...","notes":"1–2 предложения по-русски: что ты добавил и зачем"}`;
+}
+async function builderAdvise(){
+  if(!state.builder.req.trim()){toast("Сначала опишите идею кадра");$("#b-req")?.focus();return}
+  const data=await runJob("advice","Режиссёр продумывает ваш кадр",advicePrompt());
+  if(!data) return;
+  const recs={}; for(const k in (data.recs||{})){const r=data.recs[k]; if(r&&bopt(k,r.id)) recs[k]={id:r.id,why:String(r.why||"")}}
+  state.builder.advice={start:String(data.start||""),idea:String(data.idea||""),mistakes:(data.mistakes||[]).map(String).slice(0,4),recs};
+  save(); render();
+}
+async function builderImprove(){
+  if(!state.builder.req.trim()){toast("Сначала опишите идею кадра");$("#b-req")?.focus();return}
+  const data=await runJob("improve","Режиссёр дописывает промпт",improvePrompt());
   if(!data) return;
   if(!data.image_prompt){lastError=ERR.invalid_json;render();return}
-  state.studio.res={title:String(data.title||"Кадр"),image_prompt:String(data.image_prompt),video_prompt:String(data.video_prompt||""),negative:String(data.negative||""),notes:String(data.notes||"")};
-  delete state.media.studio; save(); render();
+  state.builder.improved={image_prompt:String(data.image_prompt),video_prompt:String(data.video_prompt||""),negative:String(data.negative||""),notes:String(data.notes||"")};
+  delete state.media.builder; save(); render();
 }
-function studio(){
-  const s=state.studio, r=state.result, res=s.res;
-  const noGen = runtimeChecked && !sampleFn ? `<p class="note">Написание промптов и генерация работают, когда приложение открыто в Claude.</p>`:"";
-  return `<div class="stack">${jobBar()}
-  <section class="panel stack">
-    <div class="head"><span class="label">Студия Outsee</span><h2>Опишите кадр своими словами</h2><p class="muted">Режиссёр превратит запрос в подробный промпт, а Outsee сгенерирует фото или видео. Цену покажем до запуска.</p></div>
-    <div class="field"><label for="st-req">Запрос</label><textarea id="st-req" data-studio="req" rows="3" placeholder="Например: девушка в белом льняном платье идёт по пустому пляжу на рассвете, ветер в волосах">${esc(s.req)}</textarea></div>
-    <div class="grid2">
-      <div class="field"><span class="lab">Что делаем</span><div class="chips">${[["image","Фото"],["video","Видео"]].map(([v,l])=>`<button type="button" class="chip" data-sset="kind" data-val="${v}" aria-pressed="${s.kind===v}">${l}</button>`).join("")}</div></div>
-      <div class="field"><span class="lab">Формат</span><div class="chips">${["9:16","16:9","1:1","3:4","4:3"].map(a=>`<button type="button" class="chip mono" data-sset="aspect" data-val="${a}" aria-pressed="${s.aspect===a}">${a}</button>`).join("")}</div></div>
-      ${s.kind==="video"?`<div class="field"><span class="lab">Длительность</span><div class="chips">${[5,8,10,15].map(d=>`<button type="button" class="chip mono" data-sset="dur" data-val="${d}" aria-pressed="${s.dur===d}">${d} с</button>`).join("")}</div></div>`:""}
-      ${r?`<div class="field"><span class="lab">Герой</span><div class="chips"><button type="button" class="chip" data-sset="useHero" data-val="${!s.useHero}" aria-pressed="${s.useHero}">Герой проекта: ${esc(r.character?.name||"из раскадровки")}</button></div><span class="hint">${sheetUrl()?"Лист персонажа уже есть — лицо возьмём с него.":"Для точного лица сначала сделайте лист персонажа на вкладке «Проект»."}</span></div>`:""}
-    </div>
-    ${osSettings()}
-    <div class="actions"><button class="btn primary" data-act="studio" ${job?"disabled":""}>${res?"Переписать промпт":"Написать промпт"}</button></div>
-    ${noGen}
-  </section>
-  ${res?`<section class="panel stack">
-    <div class="head"><span class="label">Промпт</span><h3>${esc(res.title)}</h3>${res.notes?`<p class="muted">${esc(res.notes)}</p>`:""}</div>
-    <div class="field"><div class="prompt"><div class="ph"><label for="st-img">Фото · image${s.useHero&&r?" (паспорт героя и стиль добавятся при запуске)":""}</label><button class="btn small" data-copy="st-img">Копировать</button></div>
-      <textarea id="st-img" data-sres="image_prompt" rows="6" class="mono" style="font-size:.8rem">${esc(res.image_prompt)}</textarea></div></div>
-    ${s.kind==="video"?`<div class="field"><div class="prompt"><div class="ph"><label for="st-vid">Движение · video</label><button class="btn small" data-copy="st-vid">Копировать</button></div>
-      <textarea id="st-vid" data-sres="video_prompt" rows="4" class="mono" style="font-size:.8rem">${esc(res.video_prompt)}</textarea></div></div>`:""}
-    <div class="field"><label for="st-neg">Негатив</label><input type="text" id="st-neg" data-sres="negative" value="${esc(res.negative)}"></div>
-    ${osBlock("studio",{video:s.kind==="video"})}
-  </section>`:""}
-  </div>`;
+function catCard(c,n){
+  const b=state.builder, recs=brecs(), rec=recs[c.id], cur=c.id==="focus"||c.id==="mood"?b[c.id]:b.sel[c.id];
+  const shown=bopt(c.id,cur)||(rec&&bopt(c.id,rec.id));
+  const chips=c.opts.map(o=>{const isRec=rec&&rec.id===o[0];return `<button type="button" class="chip${isRec?" rec":""}" data-pick="${c.id}" data-val="${o[0]}" aria-pressed="${cur===o[0]}">${isRec?"★ ":""}${esc(o[1])}</button>`}).join("");
+  let detail="";
+  if(shown){
+    const isRec=rec&&rec.id===shown[0];
+    detail=`<div class="odetail">${c.id==="size"?`<div class="frame" style="aspect-ratio:${b.aspect.replace(":","/")};height:72px">${frameSVG(shown[1],b.aspect)}</div>`:""}
+      <div class="od-t"><div class="row"><b>${esc(shown[1])}</b>${shown[2]?`<span class="mono en-t">${esc(shown[2])}</span>`:""}</div>
+      <p><span class="muted">Когда выбирать:</span> ${esc(shown[3])}</p>
+      ${isRec?`<p class="recwhy">★ ${rec.src==="claude"?"Режиссёр советует для вашей идеи":"Подходит"}: ${esc(rec.why)}</p>`:rec?`<p class="muted" style="font-size:.84rem">★ Совет: ${esc(bopt(c.id,rec.id)[1])} — ${esc(rec.why)}</p>`:""}
+      ${cur&&cur===shown[0]?"":`<p class="muted" style="font-size:.8rem">Нажмите вариант, чтобы добавить его в промпт.</p>`}</div></div>`;
+  }
+  return `<section class="panel bcat" id="cat-${c.id}">
+    <div class="bcat-h"><span class="bnum">${n}</span><div><h3>${c.title}</h3><p class="muted">${c.q}</p></div></div>
+    <p class="hint">${c.hint}</p>
+    <div class="chips">${chips}</div>${detail}</section>`;
+}
+function builder(){
+  const b=state.builder, adv=b.advice, recs=brecs(), nRec=Object.keys(recs).filter(k=>bcats().some(c=>c.id===k)).length;
+  const noGen = runtimeChecked && !sampleFn ? `<p class="note">Советы режиссёра под вашу идею и генерация работают в версии на Claude. Подсказки и сборка промпта работают везде.</p>`:"";
+  const cats=bcats().map((c,i)=>catCard(c,i+1)).join("");
+  return `${jobBar()}<div class="bwrap"><div class="stack">
+    <section class="panel stack">
+      <div class="head"><span class="label">Конструктор кадра</span><h2>Соберите кадр по шагам</h2>
+        <p class="muted">Опишите идею своими словами. Дальше идите сверху вниз: у каждого решения есть подсказка, когда его выбирать, а звёздочкой ★ отмечено то, что подходит вашей идее.</p></div>
+      <div class="field"><label for="b-req">Ваша идея</label><textarea id="b-req" data-breq rows="3" placeholder="Например: девушка в белом льняном платье идёт по пустому пляжу на рассвете">${esc(b.req)}</textarea></div>
+      <div class="grid2">
+        <div class="field"><span class="lab">Что делаем</span><div class="chips">${[["image","Фото"],["video","Видео"]].map(([v,l])=>`<button type="button" class="chip" data-bset="kind" data-val="${v}" aria-pressed="${b.kind===v}">${l}</button>`).join("")}</div></div>
+        <div class="field"><span class="lab">Формат</span><div class="chips">${["9:16","16:9","1:1","3:4","4:3"].map(a=>`<button type="button" class="chip mono" data-bset="aspect" data-val="${a}" aria-pressed="${b.aspect===a}">${a}</button>`).join("")}</div></div>
+        ${b.kind==="video"?`<div class="field"><span class="lab">Длительность</span><div class="chips">${[5,8,10,15].map(d=>`<button type="button" class="chip mono" data-bset="dur" data-val="${d}" aria-pressed="${b.dur===d}">${d} с</button>`).join("")}</div></div>`:""}
+      </div>
+      <div class="actions" style="justify-content:flex-start"><button class="btn primary" data-act="advise" ${job?"disabled":""}>Спросить режиссёра о моей идее</button><span class="muted" style="font-size:.84rem;align-self:center">Советы под ваш запрос: с чего начать, ракурс, свет и частые ошибки</span></div>
+      ${noGen}
+    </section>
+    ${adv?`<section class="panel stack advice"><div class="head"><span class="label">Совет режиссёра</span><h3>С чего начать</h3></div><p>${esc(adv.start)}</p>
+      ${adv.idea?`<div class="whybox"><span class="label">Режиссёрский ход</span><p>${esc(adv.idea)}</p></div>`:""}
+      ${adv.mistakes?.length?`<div><span class="label">Частые ошибки</span><ul class="mist">${adv.mistakes.map(m=>`<li>${esc(m)}</li>`).join("")}</ul></div>`:""}</section>`:""}
+    ${cats}
+  </div>
+  <aside class="bside"><section class="panel stack">
+    <div class="head"><span class="label">Ваш промпт</span><p class="muted" style="font-size:.84rem">Собирается из идеи и выбранных решений.</p></div>
+    ${nRec?`<button class="btn small" data-act="applyrecs">★ Применить все советы (${nRec})</button>`:""}
+    ${b.improved?`<div class="field"><div class="ph row" style="justify-content:space-between"><label for="bi-img">Улучшенный промпт</label><button class="btn small" data-copy="bi-img">Копировать</button></div>
+        <textarea id="bi-img" data-bimp="image_prompt" rows="8" class="mono" style="font-size:.78rem">${esc(b.improved.image_prompt)}</textarea></div>
+      ${b.kind==="video"?`<div class="field"><div class="row" style="justify-content:space-between"><label for="bi-vid">Движение</label><button class="btn small" data-copy="bi-vid">Копировать</button></div><textarea id="bi-vid" data-bimp="video_prompt" rows="4" class="mono" style="font-size:.78rem">${esc(b.improved.video_prompt)}</textarea></div>`:""}
+      ${b.improved.notes?`<p class="muted" style="font-size:.82rem">${esc(b.improved.notes)}</p>`:""}
+      <button class="btn small" data-act="unimprove">Вернуться к собранному промпту</button>`
+    :`<div class="prompt"><div class="ph"><span class="label">${b.kind==="video"?"Стартовый кадр":"Фото"}</span><button class="btn small" data-copy="bp-img">Копировать</button></div><div class="code" id="bp-img">${esc(builtImage())}</div></div>
+      ${b.kind==="video"?`<div class="prompt"><div class="ph"><span class="label">Движение</span><button class="btn small" data-copy="bp-vid">Копировать</button></div><div class="code" id="bp-vid">${esc(builtVideo())}</div></div>`:""}
+      <button class="btn" data-act="improve" ${job?"disabled":""}>Дописать промпт с режиссёром</button>`}
+    ${osBlock("builder",{video:b.kind==="video"})}
+    <button class="btn small" data-act="breset" style="align-self:flex-start">Начать заново</button>
+  </section></aside></div>`;
 }
 
 /* ---------- схема крупности ---------- */
@@ -738,8 +928,8 @@ function sizeKey(s){
 }
 const WIN={els:[-110,280],ls:[-8,116],mls:[-6,82],ms:[-5,56],mcu:[-3,36],cu:[-1.5,24],xcu:[3.2,8.5]};
 function arNum(){const [a,b]=state.ar.split(":").map(Number);return a/b}
-function frameSVG(size){
-  const k=sizeKey(size), ar=arNum();
+function frameSVG(size,arStr){
+  const k=sizeKey(size), ar=arStr?(([a,c])=>a/c)(arStr.split(":").map(Number)):arNum();
   if(k==="detail"){
     const w=100*ar;
     let waves="";for(let i=0;i<9;i++){const y=12+i*10;waves+=`<path d="M0 ${y} Q ${w/4} ${y-7} ${w/2} ${y} T ${w} ${y}" fill="none" stroke="currentColor" stroke-width="1.3" opacity="${.35+i%3*.2}"/>`}
@@ -771,7 +961,7 @@ function stepper(){
 }
 function step1(){
   return `<section class="panel stack">
-    <div class="head"><span class="label">Шаг 1 · Формат</span><h2>Что снимаем?</h2><p class="muted">Раздел задаёт режиссёрскую логику ролика.</p></div>
+    <div class="head"><span class="label">Шаг 1 · Формат</span><h2>Что снимаем?</h2><p class="muted">Раздел задаёт режиссёрскую логику ролика. <button class="linkbtn" data-act="example">Посмотреть пример готовой раскадровки</button></p></div>
     <div class="cards">${Object.entries(SECTIONS).map(([k,s])=>`<button type="button" class="scard" data-set="section" data-val="${k}" aria-pressed="${state.section===k}"><svg class="ic" viewBox="0 0 38 38" aria-hidden="true">${s.icon}</svg><b>${s.name}</b><span>${s.desc}</span></button>`).join("")}</div>
     <p class="note">${esc(SECTIONS[state.section].logic)}</p>
     <div class="grid2">
@@ -898,7 +1088,7 @@ function renderInner(){
   document.querySelectorAll(".tabs button").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===state.tab)));
   const app=$("#app");
   if(state.tab==="cheat"){app.innerHTML=cheat();return}
-  if(state.tab==="studio"){app.innerHTML=studio();updateJob();return}
+  if(state.tab==="builder"){app.innerHTML=builder();updateJob();return}
   const noGen = runtimeChecked && !sampleFn ? `<p class="note" style="margin-bottom:16px">Генерация работает, когда приложение открыто в Claude. Пример проекта и шпаргалка доступны всегда.</p>`:"";
   app.innerHTML = stepper()+jobBar()+(state.step===1||state.step===2?"":"")+( [0,step1,step2,step3,step4][state.step]() )+(state.step<4?noGen:"");
   updateJob();
@@ -922,19 +1112,25 @@ document.addEventListener("click",e=>{
     else if(d.os==="cancel"){slot(k,kind).status=peek(k,kind).url?"done":"idle";save();render()}
     else if(d.os==="link") copy(peek(k,kind).url,"Ссылка");
     return}
-  if(d.sset){const s=state.studio;s[d.sset]=d.sset==="dur"?Number(d.val):d.sset==="useHero"?d.val==="true":d.val;
-    if(d.sset==="kind"||d.sset==="useHero") {s.res=null;delete state.media.studio}
+  if(d.bset){const b=state.builder;b[d.bset]=d.bset==="dur"?Number(d.val):d.val;if(d.bset==="kind"){b.improved=null;delete state.media.builder}save();render();return}
+  if(d.pick){const b=state.builder,c=d.pick;
+    if(c==="focus"||c==="mood") b[c]=b[c]===d.val?null:d.val; else b.sel[c]=b.sel[c]===d.val?null:d.val;
     save();render();return}
   switch(d.act){
     case "stop": job?.ctl.abort(); break;
     case "ask": askQuestions(); break;
     case "direct": state.questions=[];state.answers={};buildScript(); break;
     case "build": buildScript(); break;
-    case "studio": studioWrite(); break;
+    case "advise": builderAdvise(); break;
+    case "improve": builderImprove(); break;
+    case "unimprove": state.builder.improved=null; delete state.media.builder; save(); render(); break;
+    case "applyrecs": {const r=brecs();bcats().forEach(c=>{if(r[c.id]&&!["focus","mood"].includes(c.id)) state.builder.sel[c.id]=r[c.id].id});save();render();toast("Советы применены");break}
+    case "breset": state.builder=migrate({}).builder; delete state.media.builder; save(); render(); window.scrollTo({top:0}); break;
+    case "example": {const ex=exampleState();Object.assign(state,{...ex,tab:"project",builder:state.builder,media:{builder:state.media.builder}});save();render();window.scrollTo({top:0});break}
     case "redo": redoShot(Number(d.i)); break;
     case "copyall": copy(allPrompts(),"Все промпты"); break;
     case "md": downloadMd(); break;
-    case "new": {const keep={gen:state.gen,imggen:state.imggen,plang:state.plang,depth:state.depth};state=migrate(Object.assign(blankState(),keep,{studio:state.studio}));lastError="";save();render();window.scrollTo({top:0});break}
+    case "new": {const keep={gen:state.gen,imggen:state.imggen,plang:state.plang,depth:state.depth};state=migrate(Object.assign(blankState(),keep,{builder:state.builder,media:{builder:state.media.builder}}));lastError="";save();render();window.scrollTo({top:0});break}
   }
 });
 document.addEventListener("input",e=>{
@@ -944,9 +1140,9 @@ document.addEventListener("input",e=>{
   else if(d.ansinput!==undefined){state.answers[Number(d.ansinput)]=t.value;save();
     t.closest(".q").querySelectorAll(".opt").forEach(o=>o.setAttribute("aria-pressed","false"))}
   else if(d.redo!==undefined){redoWish[Number(d.redo)]=t.value}
-  else if(d.studio){state.studio[d.studio]=t.value;save()}
+  else if(d.breq!==undefined){state.builder.req=t.value;save();const a=$("#bp-img"),v=$("#bp-vid");if(a)a.textContent=builtImage();if(v)v.textContent=builtVideo()}
+  else if(d.bimp&&state.builder.improved){state.builder.improved[d.bimp]=t.value;save()}
   else if(d.oset){state[d.oset]=t.value;save()}
-  else if(d.sres&&state.studio.res){state.studio.res[d.sres]=t.value;save()}
 });
 document.addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.dataset?.redo!==undefined){e.preventDefault();redoShot(Number(e.target.dataset.redo))}});
 
